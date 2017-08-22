@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{E6CB75CA-DE48-4DC8-8C24-5919BCF308C9}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>net.vieapps.Services.Books</RootNamespace>
+    <AssemblyName>VIEApps.Services.Books.Http</AssemblyName>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=10.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\..\..\packages\Newtonsoft.Json.10.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Web" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="FileHandler.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Components\Caching\VIEApps.Components.Caching.csproj">
+      <Project>{98147bac-f0a1-48d8-9e1f-064dd227d281}</Project>
+      <Name>VIEApps.Components.Caching</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Components\Security\VIEApps.Components.Security.csproj">
+      <Project>{bf8597e1-3fdf-4d5e-b990-6f8bcd8bbc70}</Project>
+      <Name>VIEApps.Components.Security</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Components\Utility\VIEApps.Components.Utility.csproj">
+      <Project>{995c1122-0acc-4cf4-8a89-775212a35d89}</Project>
+      <Name>VIEApps.Components.Utility</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Base\VIEApps.Services.Base.csproj">
+      <Project>{c496cef5-9ff8-4364-9860-fcdefed4e277}</Project>
+      <Name>VIEApps.Services.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Files\Http.AbstractHandler\VIEApps.Services.Files.Http.AbstractHandler.csproj">
+      <Project>{edd2f296-eb6d-4c3a-80be-03b0ddd982d3}</Project>
+      <Name>VIEApps.Services.Files.Http.AbstractHandler</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Component\VIEApps.Services.Books.Component.csproj">
+      <Project>{0f090593-616c-40f0-aa59-b8db69bc2920}</Project>
+      <Name>VIEApps.Services.Books.Component</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
