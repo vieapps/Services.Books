@@ -1,10 +1,8 @@
 ﻿#region Related components
 using System;
 using System.IO;
+using System.Linq;
 using System.Collections.Generic;
-
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Caching;
@@ -78,7 +76,7 @@ namespace net.vieapps.Services.Books
 
 		static string _FilesPath = null;
 
-		static string FilesPath
+		internal static string FilesPath
 		{
 			get
 			{
@@ -187,14 +185,6 @@ namespace net.vieapps.Services.Books
 			return (firstChar >= '0' && firstChar <= '9') ? "0" : firstChar.ToString();
 		}
 
-		public static string GetUriFilename(this string input)
-		{
-			var output = UtilityService.GetNormalizedFilename(input.GetANSIUri());
-			while (output.IndexOf("--") > -1)
-				output = output.Replace("--", "-").ToLower();
-			return output;
-		}
-
 		public static string GetNormalized(this string @string)
 		{
 			int counter = -1;
@@ -299,6 +289,34 @@ namespace net.vieapps.Services.Books
 				return size.ToString("##0.##") + " " + (size >= 1.0d ? "K" : "") + "Bytes";
 			}
 		}
+
+		public static string GetDataOfJson(string json, string attribute)
+		{
+			if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(attribute))
+				return "";
+
+			var indicator = "\"" + attribute + "\":";
+			var start = json.PositionOf(indicator);
+			start = start < 0
+				? -1
+				: json.PositionOf("\"", start + indicator.Length);
+			var end = start < 0
+				? -1
+				: json.PositionOf("\"", start + 1);
+
+			return start > -1 && end > 0
+				? json.Substring(start + 1, end - start - 1).Trim()
+				: "";
+		}
+
+		public static string GetDataFromJsonFile(string filePath, string attribute)
+		{
+			if (!File.Exists(filePath) || string.IsNullOrWhiteSpace(attribute))
+				return "";
+
+			string json = UtilityService.ReadTextFile(filePath, 15).Aggregate((i, j) => i + "\n" + j).ToString();
+			return Utility.GetDataOfJson(json, attribute);
+		}
 		#endregion
 
 		#region Working with folders & files
@@ -354,7 +372,7 @@ namespace net.vieapps.Services.Books
 
 		public static string GetDownloadUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + Utility.GetUriFilename(book.Name);
+			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.Name.GetANSIUri();
 		}
 		#endregion
 

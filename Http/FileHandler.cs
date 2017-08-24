@@ -71,9 +71,9 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + requestInfo[3] + "-" + requestInfo[4]);
+			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + Utility.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
 			if (!fileInfo.Exists)
-				throw new FileNotFoundException();
+				throw new FileNotFoundException(context.Request.RawUrl);
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -109,7 +109,7 @@ namespace net.vieapps.Services.Books
 				requestUrl = requestUrl.Left(requestUrl.IndexOf("?"));
 
 			// check "If-Modified-Since" request to reduce traffict
-			var eTag = "Book#" + requestUrl.ToLower().GetMD5();
+			var eTag = "BookFile#" + requestUrl.ToLower().GetMD5();
 			if (context.Request.Headers["If-Modified-Since"] != null && eTag.Equals(context.Request.Headers["If-None-Match"]))
 			{
 				context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -124,6 +124,12 @@ namespace net.vieapps.Services.Books
 			if (requestInfo.Length < 4)
 				throw new InvalidRequestException();
 
+			string ext = requestUrl.IsEndsWith(".epub")
+				? ".epub"
+				: requestUrl.IsEndsWith(".mobi")
+					? ".mobi"
+					: ".json";
+
 			var name = "";
 			try
 			{
@@ -134,10 +140,9 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			name += (requestUrl.IsEndsWith(".epub") ? ".epub" : ".mobi");
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + name);
+			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + name + ext);
 			if (!fileInfo.Exists)
-				throw new FileNotFoundException();
+				throw new FileNotFoundException(context.Request.RawUrl);
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);

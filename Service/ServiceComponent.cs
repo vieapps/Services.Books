@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Dynamic;
+using System.IO;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -35,6 +36,15 @@ namespace net.vieapps.Services.Books
 				Console.WriteLine("-----------------------\r\n" + "==> [" + ex.GetType().GetTypeName(true) + "]: " + ex.Message + "\r\n" + ex.StackTrace + "\r\n-----------------------");
 		}
 
+		void CreateFolder(string path)
+		{
+			if (!Directory.Exists(path))
+				Directory.CreateDirectory(path);
+
+			if (!Directory.Exists(path + @"\" + Utility.MediaFolder))
+				Directory.CreateDirectory(path + @"\" + Utility.MediaFolder);
+		}
+
 		internal void Start(string[] args = null, System.Action nextAction = null, Func<Task> nextActionAsync = null)
 		{
 			// initialize repository
@@ -46,6 +56,17 @@ namespace net.vieapps.Services.Books
 			catch (Exception ex)
 			{
 				this.WriteInfo("Error occurred while initializing the repository", ex);
+			}
+
+			// prepare folders
+			if (Directory.Exists(Utility.FilesPath))
+			{
+				this.CreateFolder(Utility.FolderOfDataFiles);
+				foreach (var @char in Utility.Chars)
+					this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower());
+				this.CreateFolder(Utility.FolderOfStatisticFiles);
+				this.CreateFolder(Utility.FolderOfTempFiles);
+				this.CreateFolder(Utility.FolderOfTrashFiles);
 			}
 
 			// start the service
@@ -98,27 +119,67 @@ namespace net.vieapps.Services.Books
 		{
 			try
 			{
+				var objectIdentity = requestInfo.GetObjectIdentity();
 				switch (requestInfo.ObjectName.ToLower())
 				{
+
+					#region Books
 					case "book":
 						switch (requestInfo.Verb)
 						{
 							case "GET":
-								if (!requestInfo.Query.ContainsKey("object-identity"))
-									throw new InvalidRequestException();
-								else if (requestInfo.Query["object-identity"].IsEquals("search"))
+								if ("search".IsEquals(objectIdentity))
 									return await this.SearchBooksAsync(requestInfo, cancellationToken);
-								break;
+								else
+									throw new InvalidRequestException();
+
+							case "POST":
+								if (requestInfo.Query.ContainsKey("x-convert"))
+									return await this.CreateBookAsync(requestInfo, cancellationToken);
+								throw new InvalidRequestException();
 
 							default:
-								break;
+								throw new MethodNotAllowedException(requestInfo.Verb);
 						}
-						await Task.Delay(0);
-						break;
+					#endregion
 
+					#region Statistics
 					case "statistic":
-						await Task.Delay(0);
-						break;
+						switch (requestInfo.Verb)
+						{
+							default:
+								throw new MethodNotAllowedException(requestInfo.Verb);
+						}
+					#endregion
+
+					#region Accounts
+					case "account":
+						switch (requestInfo.Verb)
+						{
+							case "POST":
+								if (requestInfo.Query.ContainsKey("x-convert"))
+									return await this.CreateAccountAsync(requestInfo, cancellationToken);
+								throw new InvalidRequestException();
+
+							default:
+								throw new MethodNotAllowedException(requestInfo.Verb);
+						}
+					#endregion
+
+					#region Files
+					case "file":
+						switch (requestInfo.Verb)
+						{
+							case "POST":
+								if (requestInfo.Query.ContainsKey("x-convert"))
+									return this.CopyFiles(requestInfo, cancellationToken);
+								throw new InvalidRequestException();
+
+							default:
+								throw new MethodNotAllowedException(requestInfo.Verb);
+						}
+						#endregion
+
 				}
 
 				// unknown
@@ -130,7 +191,7 @@ namespace net.vieapps.Services.Books
 			catch (Exception ex)
 			{
 #if DEBUG
-				this.WriteInfo("Error occurred while processing\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Newtonsoft.Json.Formatting.Indented), ex);
+				this.WriteInfo("Error occurred while processing\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), ex);
 #else
 				this.WriteInfo("Error occurred while processing - Correlation ID: " + requestInfo.CorrelationID);
 #endif
@@ -300,6 +361,75 @@ namespace net.vieapps.Services.Books
 
 			// return the result
 			return result;
+		}
+		#endregion
+
+		#region Create book
+		async Task<JObject> CreateBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
+				throw new AccessDeniedException();
+
+			var book = new Book();
+			book.CopyFrom(requestInfo.GetBodyJson());
+
+			await Book.CreateAsync(book, cancellationToken);
+			return book.ToJson();
+		}
+		#endregion
+
+		#region Create account
+		async Task<JObject> CreateAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
+				throw new AccessDeniedException();
+
+			var account = new Account();
+			account.CopyFrom(requestInfo.GetBodyJson());
+
+			await Account.CreateAsync(account, cancellationToken);
+			return account.ToJson();
+		}
+		#endregion
+
+		#region Files
+		JObject CopyFiles(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			// prepare
+			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
+				throw new AccessDeniedException();
+
+			var name = requestInfo.Extra != null && requestInfo.Extra.ContainsKey("Name")
+				? requestInfo.Extra["Name"]
+				: null;
+
+			var path = requestInfo.Extra != null && requestInfo.Extra.ContainsKey("Path")
+				? requestInfo.Extra["Path"]
+				: null;
+
+			if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+				throw new InvalidRequestException();
+
+			var source = path + @"\" + name.GetFirstChar() + @"\";
+			var destination = Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\";
+			var filename = name + ".json";
+
+			// copy file
+			if (File.Exists(source + filename))
+			{
+				File.Copy(source + filename, destination + filename, true);
+
+				var permanentID = Utility.GetDataFromJsonFile(source + filename, "PermanentID");
+				UtilityService.GetFiles(source + Utility.MediaFolder, permanentID + "-*.*").ForEach(file =>
+				{
+					File.Copy(file.FullName, destination + Utility.MediaFolder + @"\" + file.Name, true);
+				});
+			}
+
+			return new JObject()
+			{
+				{ "Status", "OK" }
+			};
 		}
 		#endregion
 

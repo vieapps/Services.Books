@@ -18,6 +18,9 @@ using System.Runtime.InteropServices;
 // If you need to access a type in this assembly from COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 
+// visible related information to some special components
+[assembly: InternalsVisibleTo("VIEApps.Services.Books")]
+
 // Version information for an assembly consists of the following four values:
 //      Major Version
 //      Minor Version

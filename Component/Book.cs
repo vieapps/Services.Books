@@ -27,7 +27,7 @@ namespace net.vieapps.Services.Books
 			this.Original = "";
 			this.Publisher = "";
 			this.Producer = "";
-			this.Language = "vi-VN";
+			this.Language = "vi";
 			this.Status = "";
 			this.Cover = "";
 			this.Tags = "";
@@ -70,7 +70,7 @@ namespace net.vieapps.Services.Books
 		[Property(MaxLength = 250)]
 		public string Producer { get; set; }
 
-		[Property(MaxLength = 5)]
+		[Property(MaxLength = 2)]
 		public string Language { get; set; }
 
 		[Property(MaxLength = 50), Sortable]
@@ -85,10 +85,10 @@ namespace net.vieapps.Services.Books
 		[Sortable]
 		public DateTime LastUpdated { get; set; }
 
-		[JsonIgnore, AsJson]
+		[AsJson]
 		public List<CounterInfo> Counters { get; set; }
 
-		[JsonIgnore, AsJson]
+		[AsJson]
 		public List<RatingPoint> RatingPoints { get; set; }
 
 		[Property(MaxLength = 250)]
@@ -154,17 +154,26 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region To JSON
-		public override JObject ToJson(bool addTypeOfExtendedProperties = false)
+		public override JObject ToJson(bool addTypeOfExtendedProperties)
+		{
+			return this.ToJson(addTypeOfExtendedProperties, true, true);
+		}
+
+		public JObject ToJson(bool addTypeOfExtendedProperties, bool refineURIs, bool statisticsAsDictionaries)
 		{
 			var json = base.ToJson(addTypeOfExtendedProperties);
 
-			if (!string.IsNullOrWhiteSpace(this.Cover))
+			if (refineURIs && !string.IsNullOrWhiteSpace(this.Cover))
 				json["Cover"] = this.Cover.NormalizeMediaFileUris(this);
 
+			if (statisticsAsDictionaries)
+			{
+				json["RatingPoints"] = RatingPoint.ToJObject(this.RatingPoints);
+				json["Counters"] = CounterInfo.ToJObject(this.Counters);
+			}
+
 			json.Add(new JProperty("Chapters", new JArray()));
-			json.Add(new JProperty("TotalChapters", this.TotalChapters));
-			json.Add(new JProperty("RatingPoints", RatingPoint.ToJObject(this.RatingPoints)));
-			json.Add(new JProperty("Counters", CounterInfo.ToJObject(this.Counters)));
+			json.Add(new JProperty("TOCs", new JArray()));
 
 			json.Add(new JProperty("Downloads", new JObject() {
 				{ "Epub", this.GetDownloadUri() + ".epub" },
