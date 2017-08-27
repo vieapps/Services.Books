@@ -40,7 +40,7 @@ namespace net.vieapps.Services.Books
 		async Task ShowBookFileAsync(HttpContext context, CancellationToken cancellationToken)
 		{
 			// check "If-Modified-Since" request to reduce traffict
-			var eTag = "BookMedia#" + context.Request.RawUrl.ToLower().GetMD5();
+			var eTag = "BookFile#" + context.Request.RawUrl.ToLower().GetMD5();
 			if (context.Request.Headers["If-Modified-Since"] != null && eTag.Equals(context.Request.Headers["If-None-Match"]))
 			{
 				context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -58,7 +58,7 @@ namespace net.vieapps.Services.Books
 				requestUrl = requestUrl.Left(requestUrl.IndexOf("?"));
 
 			var requestInfo = requestUrl.ToArray('/', true);
-			if (requestInfo.Length < 5 || !requestInfo[3].IsValidUUID())
+			if (requestInfo.Length < 4)
 				throw new InvalidRequestException();
 
 			var name = "";
@@ -71,9 +71,17 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + Utility.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
+			if (!"no-media-file".IsEquals(name) && (requestInfo.Length < 5 || !requestInfo[3].IsValidUUID()))
+				throw new InvalidRequestException();
+
+			var filePath = Utility.FolderOfDataFiles + @"\"
+				+ ("no-media-file".IsEquals(name)
+					? "no-image.png"
+					: name.GetFirstChar() + @"\" + Utility.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
+
+			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
-				throw new FileNotFoundException(context.Request.RawUrl);
+				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -97,10 +105,6 @@ namespace net.vieapps.Services.Books
 
 		async Task DownloadBookFileAsync(HttpContext context, CancellationToken cancellationToken)
 		{
-			// check permissions
-			if (context.User == null || !(context.User is UserIdentity) || !(context.User as UserIdentity).IsAuthenticated)
-				throw new AccessDeniedException();
-
 			// prepare
 			var requestUrl = context.Request.RawUrl.Substring(context.Request.ApplicationPath.Length);
 			while (requestUrl.StartsWith("/"))
@@ -118,6 +122,10 @@ namespace net.vieapps.Services.Books
 				context.Response.Headers.Add("ETag", "\"" + eTag + "\"");
 				return;
 			}
+
+			// check permissions
+			if (context.User == null || !(context.User is UserIdentity) || !(context.User as UserIdentity).IsAuthenticated)
+				throw new AccessDeniedException();
 
 			// parse
 			var requestInfo = requestUrl.ToArray('/', true);
@@ -142,7 +150,7 @@ namespace net.vieapps.Services.Books
 
 			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + name + ext);
 			if (!fileInfo.Exists)
-				throw new FileNotFoundException(context.Request.RawUrl);
+				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);

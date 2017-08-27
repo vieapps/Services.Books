@@ -36,12 +36,12 @@ namespace net.vieapps.Services.Books
 				Console.WriteLine("-----------------------\r\n" + "==> [" + ex.GetType().GetTypeName(true) + "]: " + ex.Message + "\r\n" + ex.StackTrace + "\r\n-----------------------");
 		}
 
-		void CreateFolder(string path)
+		void CreateFolder(string path, bool mediaFolders = true)
 		{
 			if (!Directory.Exists(path))
 				Directory.CreateDirectory(path);
 
-			if (!Directory.Exists(path + @"\" + Utility.MediaFolder))
+			if (mediaFolders && !Directory.Exists(path + @"\" + Utility.MediaFolder))
 				Directory.CreateDirectory(path + @"\" + Utility.MediaFolder);
 		}
 
@@ -61,7 +61,7 @@ namespace net.vieapps.Services.Books
 			// prepare folders
 			if (Directory.Exists(Utility.FilesPath))
 			{
-				this.CreateFolder(Utility.FolderOfDataFiles);
+				this.CreateFolder(Utility.FolderOfDataFiles, false);
 				foreach (var @char in Utility.Chars)
 					this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower());
 				this.CreateFolder(Utility.FolderOfStatisticFiles);
@@ -156,6 +156,9 @@ namespace net.vieapps.Services.Books
 					case "account":
 						switch (requestInfo.Verb)
 						{
+							case "GET":
+								return await this.GetAccountAsync(requestInfo, cancellationToken);
+
 							case "POST":
 								if (requestInfo.Query.ContainsKey("x-convert"))
 									return await this.CreateAccountAsync(requestInfo, cancellationToken);
@@ -290,8 +293,8 @@ namespace net.vieapps.Services.Books
 				? request.Get<ExpandoObject>("FilterBy").ToFilterBy<Book>()
 				: null;
 
-			var sort = request.Has("OrderBy")
-				? request.Get<ExpandoObject>("OrderBy").ToSortBy<Book>()
+			var sort = request.Has("SortBy")
+				? request.Get<ExpandoObject>("SortBy").ToSortBy<Book>()
 				: null;
 			if (sort == null && string.IsNullOrWhiteSpace(query))
 				sort = Sorts<Book>.Descending("LastUpdated");
@@ -343,7 +346,7 @@ namespace net.vieapps.Services.Books
 			var result = new JObject()
 			{
 				{ "FilterBy", filter?.ToClientJson(query) },
-				{ "OrderBy", sort?.ToClientJson() },
+				{ "SortBy", sort?.ToClientJson() },
 				{ "Pagination", pagination?.GetPagination() },
 				{ "Objects", objects?.ToJsonArray() }
 			};
@@ -375,6 +378,32 @@ namespace net.vieapps.Services.Books
 
 			await Book.CreateAsync(book, cancellationToken);
 			return book.ToJson();
+		}
+		#endregion
+
+		#region Get account
+		async Task<JObject> GetAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			var account = await Account.GetAsync<Account>(requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID);
+			if (account == null)
+				throw new InformationNotFoundException();
+
+			var json = await this.CallServiceAsync(new RequestInfo(requestInfo.Session)
+			{
+				ServiceName = "users",
+				ObjectName = "profile",
+				Query = new Dictionary<string, string>()
+				{
+					{ "object-identity", account.ID }
+				}
+			}, cancellationToken);
+
+			var data = account.ToJson();
+			foreach (var info in data)
+				if (!info.Key.IsEquals("ID"))
+					json.Add(info.Key, info.Value);
+
+			return json;
 		}
 		#endregion
 

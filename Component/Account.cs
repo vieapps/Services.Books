@@ -4,7 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Converters;
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -138,6 +140,15 @@ namespace net.vieapps.Services.Books
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public override Privileges OriginalPrivileges { get; set; }
+		#endregion
+
+		#region To JSON
+		public override JObject ToJson(bool addTypeOfExtendedProperties)
+		{
+			var json = base.ToJson(addTypeOfExtendedProperties);
+			json.Add(new JProperty("Counters", CounterInfo.ToJObject(this.Counters)));
+			return json;
+		}
 		#endregion
 
 	}

@@ -112,7 +112,15 @@ namespace net.vieapps.Services.Books
 			get
 			{
 				if (string.IsNullOrWhiteSpace(this._PermanentID))
-					this._PermanentID = UtilityService.GetUUID();
+				{
+					if (string.IsNullOrWhiteSpace(this.ID) || string.IsNullOrWhiteSpace(this.Name))
+						this._PermanentID = UtilityService.GetUUID();
+					else
+					{
+						this._PermanentID = Utility.GetDataFromJsonFile(Utility.FolderOfDataFiles + @"\" + this.Name.GetFirstChar() + @"\" + this.Name + ".json", "PermanentID");
+						Utility.Cache.Set(this);
+					}
+				}
 				return this._PermanentID;
 			}
 		}
@@ -156,29 +164,30 @@ namespace net.vieapps.Services.Books
 		#region To JSON
 		public override JObject ToJson(bool addTypeOfExtendedProperties)
 		{
-			return this.ToJson(addTypeOfExtendedProperties, true, true);
+			return this.ToJson(addTypeOfExtendedProperties, true);
 		}
 
-		public JObject ToJson(bool addTypeOfExtendedProperties, bool refineURIs, bool statisticsAsDictionaries)
+		public JObject ToJson(bool addTypeOfExtendedProperties, bool asNormalized)
 		{
 			var json = base.ToJson(addTypeOfExtendedProperties);
-
-			if (refineURIs && !string.IsNullOrWhiteSpace(this.Cover))
-				json["Cover"] = this.Cover.NormalizeMediaFileUris(this);
-
-			if (statisticsAsDictionaries)
+			if (asNormalized)
 			{
+				json["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
+					? Utility.MediaUri.NormalizeMediaFileUris(null)
+					: this.Cover.NormalizeMediaFileUris(this);
+
 				json["RatingPoints"] = RatingPoint.ToJObject(this.RatingPoints);
 				json["Counters"] = CounterInfo.ToJObject(this.Counters);
+
+				json.Add(new JProperty("Chapters", new JArray()));
+				json.Add(new JProperty("TOCs", new JArray()));
+
+				json.Add(new JProperty("Downloads", new JObject()
+				{
+					{ "Epub", this.GetDownloadUri() + ".epub" },
+					{ "Mobi", this.GetDownloadUri() + ".mobi" }
+				}));
 			}
-
-			json.Add(new JProperty("Chapters", new JArray()));
-			json.Add(new JProperty("TOCs", new JArray()));
-
-			json.Add(new JProperty("Downloads", new JObject() {
-				{ "Epub", this.GetDownloadUri() + ".epub" },
-				{ "Mobi", this.GetDownloadUri() + ".mobi" }
-			}));
 
 			return json;
 		}

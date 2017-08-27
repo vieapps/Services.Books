@@ -38,7 +38,7 @@ namespace net.vieapps.Services.Books
 
 		public static CacheManager Cache { get { return Utility._Cache; } }
 
-		static CacheManager _DataCache = new CacheManager("VIEApps-Services-Books-Files", "Sliding", Utility.CacheTime);
+		static CacheManager _DataCache = new CacheManager("VIEApps-Services-Books-Data", "Sliding", Utility.CacheTime);
 
 		public static CacheManager DataCache { get { return Utility._DataCache; } }
 		#endregion
@@ -154,7 +154,7 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		public static string GetFirstChar(this string @string)
+		public static string GetFirstChar(this string @string, bool userLower = true)
 		{
 			string result = UtilityService.GetNormalizedFilename(@string).ConvertUnicodeToANSI().Trim();
 			if (string.IsNullOrWhiteSpace(result))
@@ -181,8 +181,15 @@ namespace net.vieapps.Services.Books
 					index++;
 			}
 
-			char firstChar = index < result.Length ? result[index] : '0';
-			return (firstChar >= '0' && firstChar <= '9') ? "0" : firstChar.ToString();
+			char firstChar = index < result.Length
+				? result[index]
+				: '0';
+
+			return (firstChar >= '0' && firstChar <= '9')
+				? "0"
+				: userLower
+					? firstChar.ToString().ToLower()
+					: firstChar.ToString().ToUpper();
 		}
 
 		public static string GetNormalized(this string @string)
@@ -360,7 +367,10 @@ namespace net.vieapps.Services.Books
 		#region Working with URIs
 		public static string GetMediaFileUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/" + book.Name.Url64Encode() + "/" + book.ID + "/";
+			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/"
+				+ (book != null
+					? book.Name.Url64Encode() + "/" + book.PermanentID + "/"
+					: "no-media-file".Url64Encode() + "/book.png");
 		}
 
 		public static string NormalizeMediaFileUris(this string content, Book book)
