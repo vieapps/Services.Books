@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Threading;
 using System.Runtime.InteropServices;
+
+using net.vieapps.Components.Utility;
 
 namespace net.vieapps.Services.Books
 {
@@ -9,19 +12,53 @@ namespace net.vieapps.Services.Books
 
 		static void Main(string[] args)
 		{
+			// prepare
 			Console.OutputEncoding = System.Text.Encoding.UTF8;
-			
-			// start the component
 			Program.Component = new ServiceComponent();
-			Program.Component.Start(args, () => Console.WriteLine("===============> Press the RETURN key to terminate......."));
 
-			// handle the closing events
-			Program.ConsoleEventHandler = new ConsoleEventDelegate(Program.ConsoleEventCallback);
-			Program.SetConsoleCtrlHandler(Program.ConsoleEventHandler, true);
+			// set flag to run or exit (when called from API Gateway)
+			EventWaitHandle waitHandle = null;
+			bool isCalledFromAPIGateway = false, isCalledFromAPIGatewayToStop = false;
+			if (args != null)
+				for (var index = 0; index < args.Length; index++)
+					if (args[index].IsStartsWith("/agc:"))
+					{
+						isCalledFromAPIGateway = true;
+						isCalledFromAPIGatewayToStop = args[index].IsEquals("/agc:s");
+						break;
+					}
 
-			// wait here
-			Console.ReadLine();
-			Program.Exit();
+			// check to see if request to exit or not
+			if (isCalledFromAPIGateway)
+			{
+				waitHandle = new EventWaitHandle(false, EventResetMode.AutoReset, "VIEApps.Services." + Program.Component.ServiceName.GetCapitalizedFirstLetter(), out bool createdNew);
+				if (!createdNew)
+					waitHandle.Set();
+
+				// call to stop
+				if (isCalledFromAPIGatewayToStop)
+				{
+					Program.Component.Dispose();
+					return;
+				}
+			}
+
+			// start the component
+			Program.Component.Start(args);
+
+			// waiting right here
+			if (isCalledFromAPIGateway)
+			{
+				waitHandle.WaitOne();
+				Program.Exit();
+			}
+			else
+			{
+				Program.ConsoleEventHandler = new ConsoleEventDelegate(Program.ConsoleEventCallback);
+				Program.SetConsoleCtrlHandler(Program.ConsoleEventHandler, true);
+				Console.WriteLine("=====> Press RETURN to terminate...");
+				Console.ReadLine();
+			}
 		}
 
 		internal static void Exit()

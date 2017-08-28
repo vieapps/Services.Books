@@ -38,7 +38,7 @@ namespace net.vieapps.Services.Books
 
 		public static CacheManager Cache { get { return Utility._Cache; } }
 
-		static CacheManager _DataCache = new CacheManager("VIEApps-Services-Books-Data", "Sliding", Utility.CacheTime);
+		static CacheManager _DataCache = new CacheManager("VIEApps-Services-Books-Data", "Absolute", Utility.CacheTime);
 
 		public static CacheManager DataCache { get { return Utility._DataCache; } }
 		#endregion

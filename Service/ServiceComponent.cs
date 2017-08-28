@@ -80,8 +80,9 @@ namespace net.vieapps.Services.Books
 							this.WriteInfo("The service is registered - PID: " + pid);
 							this.WriteLog(UtilityService.BlankUID, this.ServiceName, null, "The service [" + this.ServiceURI + "] is registered - PID: " + pid);
 						},
-						ex => this.WriteInfo("Error occurred while registering the service", ex),
-						this.OnInterCommunicateMessageReceived
+						(ex) => {
+							this.WriteInfo("Error occurred while registering the service", ex);
+						}
 					);
 				}
 				catch (Exception ex)
@@ -202,16 +203,6 @@ namespace net.vieapps.Services.Books
 			} 
 		}
 
-		void OnInterCommunicateMessageReceived(CommunicateMessage message)
-		{
-			
-		}
-
-		~ServiceComponent()
-		{
-			this.Dispose(false);
-		}
-
 		#region Get privileges/actions (base on role)
 		List<Privilege> GetPrivileges(RequestInfo requestInfo, User user, Privileges privileges)
 		{
@@ -306,7 +297,7 @@ namespace net.vieapps.Services.Books
 			var pageNumber = pagination.Item4;
 
 			// check cache
-			var cacheKey = filter != null || sort != null
+			var cacheKey = string.IsNullOrWhiteSpace(query) && (filter != null || sort != null)
 				? (filter != null ? filter.GetMD5() + ":" : "") + (sort != null ? sort.GetMD5() + ":" : "") + pageNumber.ToString()
 				: "";
 
@@ -347,8 +338,8 @@ namespace net.vieapps.Services.Books
 			{
 				{ "FilterBy", filter?.ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
-				{ "Pagination", pagination?.GetPagination() },
-				{ "Objects", objects?.ToJsonArray() }
+				{ "Pagination", pagination.GetPagination() },
+				{ "Objects", objects.ToJsonArray() }
 			};
 
 			// update cache
@@ -459,6 +450,13 @@ namespace net.vieapps.Services.Books
 			{
 				{ "Status", "OK" }
 			};
+		}
+		#endregion
+
+		#region Process inter-communicate messages
+		protected override void ProcessInterCommunicateMessage(CommunicateMessage message)
+		{
+
 		}
 		#endregion
 
