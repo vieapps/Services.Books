@@ -122,67 +122,17 @@ namespace net.vieapps.Services.Books
 			{
 				switch (requestInfo.ObjectName.ToLower())
 				{
-
-					#region Books
 					case "book":
-						switch (requestInfo.Verb)
-						{
-							case "GET":
-								if ("search".IsEquals(requestInfo.GetObjectIdentity()))
-									return await this.SearchBooksAsync(requestInfo, cancellationToken);
-								throw new InvalidRequestException();
+						return await this.ProcessBooksAsync(requestInfo, cancellationToken);
 
-							case "POST":
-								if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
-									return await this.CreateBookAsync(requestInfo, cancellationToken);
-								throw new InvalidRequestException();
-
-							default:
-								throw new MethodNotAllowedException(requestInfo.Verb);
-						}
-					#endregion
-
-					#region Statistics
 					case "statistic":
-						switch (requestInfo.Verb)
-						{
-							default:
-								throw new MethodNotAllowedException(requestInfo.Verb);
-						}
-					#endregion
+						return await this.ProcessStatisticsAsync(requestInfo, cancellationToken);
 
-					#region Account Profiles
 					case "profile":
-						switch (requestInfo.Verb)
-						{
-							case "GET":
-								return await this.GetAccountProfileAsync(requestInfo, cancellationToken);
+						return await this.ProcessAccountProfilesAsync(requestInfo, cancellationToken);
 
-							case "POST":
-								return await this.CreateAccountProfileAsync(requestInfo, cancellationToken);
-
-							case "PUT":
-								return await this.UpdateAccountProfileAsync(requestInfo, cancellationToken);
-
-							default:
-								throw new MethodNotAllowedException(requestInfo.Verb);
-						}
-					#endregion
-
-					#region Files
 					case "file":
-						switch (requestInfo.Verb)
-						{
-							case "POST":
-								if (requestInfo.Query.ContainsKey("x-convert"))
-									return this.CopyFiles(requestInfo, cancellationToken);
-								throw new InvalidRequestException();
-
-							default:
-								throw new MethodNotAllowedException(requestInfo.Verb);
-						}
-						#endregion
-
+						return await this.ProcessFilesAsync(requestInfo, cancellationToken);
 				}
 
 				// unknown
@@ -267,8 +217,24 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
+		Task<JObject> ProcessBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			switch (requestInfo.Verb)
+			{
+				case "GET":
+					if ("search".IsEquals(requestInfo.GetObjectIdentity()))
+						return this.SearchBooksAsync(requestInfo, cancellationToken);
+					return Task.FromException<JObject>(new InvalidRequestException());
+
+				case "POST":
+					return this.CreateBookAsync(requestInfo, cancellationToken);
+			}
+
+			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+		}
+
 		#region Search books
-		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
+		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
 			if (!this.IsAuthorized(requestInfo, Components.Security.Action.View, null, (user, privileges) => this.GetPrivileges(requestInfo, user, privileges), (role) => this.GetActions(requestInfo, role)))
@@ -357,54 +323,82 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Create book
+		#region Create a book
 		async Task<JObject> CreateBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
-				throw new AccessDeniedException();
+			// check permission on convert
+			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
+			{
+				if (!requestInfo.Session.User.IsSystemAdministrator)
+					throw new AccessDeniedException();
+			}
 
-			var book = new Book();
-			book.CopyFrom(requestInfo.GetBodyJson());
+			// check permission on create new
+			else
+			{
 
+			}
+
+			// create new
+			var book = requestInfo.GetBodyJson().Copy<Book>();
 			await Book.CreateAsync(book, cancellationToken);
 			return book.ToJson();
 		}
 		#endregion
 
-		#region Create account profile
+		Task<JObject> ProcessStatisticsAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+		}
+
+		Task<JObject> ProcessAccountProfilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			switch (requestInfo.Verb)
+			{
+				case "GET":
+					return this.GetAccountProfileAsync(requestInfo, cancellationToken);
+
+				case "POST":
+					return this.CreateAccountProfileAsync(requestInfo, cancellationToken);
+
+				case "PUT":
+					return this.UpdateAccountProfileAsync(requestInfo, cancellationToken);
+			}
+
+			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+		}
+
+		#region Create an account profile
 		async Task<JObject> CreateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			// convert
+			// prepare identity
+			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
+
+			// check permission on convert
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
 				if (!requestInfo.Session.User.IsSystemAdministrator)
 					throw new AccessDeniedException();
-
-				var account = new Account();
-				account.CopyFrom(requestInfo.GetBodyJson());
-
-				await Account.CreateAsync(account, cancellationToken);
-				return account.ToJson();
 			}
 
-			// create account profile
+			// check permission on create
 			else
 			{
-				var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 				var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
 				if (!gotRights)
 					throw new AccessDeniedException();
-
-				var account = new Account();
-				account.CopyFrom(requestInfo.GetBodyJson());
-
-				await Account.CreateAsync(account, cancellationToken);
-				return account.ToJson();
 			}
+
+			// create account profile
+			var account = requestInfo.GetBodyJson().Copy<Account>();
+			account.ID = id;
+
+			await Account.CreateAsync(account, cancellationToken);
+			return account.ToJson();
 		}
 		#endregion
 
-		#region Get account profile
+		#region Get an account profile
 		async Task<JObject> GetAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
@@ -415,6 +409,7 @@ namespace net.vieapps.Services.Books
 			if (!gotRights)
 				throw new AccessDeniedException();
 
+			// get information
 			var account = await Account.GetAsync<Account>(id, cancellationToken);
 			if (account == null)
 				throw new InformationNotFoundException();
@@ -423,9 +418,10 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Update account profile
+		#region Update an account profile
 		async Task<JObject> UpdateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
+			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
 			if (!gotRights)
@@ -433,21 +429,41 @@ namespace net.vieapps.Services.Books
 			if (!gotRights)
 				throw new AccessDeniedException();
 
+			// get existing information
 			var account = await Account.GetAsync<Account>(id, cancellationToken);
 			if (account == null)
 				throw new InformationNotFoundException();
 
+			// update
 			account.CopyFrom(requestInfo.GetBodyJson());
+			account.ID = id;
+
 			await Account.UpdateAsync(account, cancellationToken);
 			return account.ToJson();
 		}
 		#endregion
 
-		#region Working with files
-		JObject CopyFiles(RequestInfo requestInfo, CancellationToken cancellationToken)
+		Task<JObject> ProcessFilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			// convert file
+			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
+				try
+				{
+					return Task.FromResult(this.CopyFiles(requestInfo));
+				}
+				catch (Exception ex)
+				{
+					return Task.FromException<JObject>(ex);
+				}
+
+			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+		}
+
+		#region Copy files
+		JObject CopyFiles(RequestInfo requestInfo)
 		{
 			// prepare
-			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
+			if (!requestInfo.Session.User.IsSystemAdministrator)
 				throw new AccessDeniedException();
 
 			var name = requestInfo.Extra != null && requestInfo.Extra.ContainsKey("Name")
