@@ -150,7 +150,9 @@ namespace net.vieapps.Services.Books
 					: this.Title.Trim() + (string.IsNullOrWhiteSpace(this.Author) ? "" : " - " + this.Author.Trim());
 			}
 		}
+		#endregion
 
+		#region IBusinessEntity Properties
 		[JsonIgnore, BsonIgnore, Ignore]
 		public override string SystemID { get; set; }
 
@@ -175,9 +177,6 @@ namespace net.vieapps.Services.Books
 				json["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
 					? Utility.MediaUri.NormalizeMediaFileUris(null)
 					: this.Cover.NormalizeMediaFileUris(this);
-
-				json["RatingPoints"] = RatingPoint.ToJObject(this.RatingPoints);
-				json["Counters"] = CounterInfo.ToJObject(this.Counters);
 
 				json.Add(new JProperty("Chapters", new JArray()));
 				json.Add(new JProperty("TOCs", new JArray()));

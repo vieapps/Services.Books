@@ -120,7 +120,6 @@ namespace net.vieapps.Services.Books
 		{
 			try
 			{
-				var objectIdentity = requestInfo.GetObjectIdentity();
 				switch (requestInfo.ObjectName.ToLower())
 				{
 
@@ -129,13 +128,12 @@ namespace net.vieapps.Services.Books
 						switch (requestInfo.Verb)
 						{
 							case "GET":
-								if ("search".IsEquals(objectIdentity))
+								if ("search".IsEquals(requestInfo.GetObjectIdentity()))
 									return await this.SearchBooksAsync(requestInfo, cancellationToken);
-								else
-									throw new InvalidRequestException();
+								throw new InvalidRequestException();
 
 							case "POST":
-								if (requestInfo.Query.ContainsKey("x-convert"))
+								if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 									return await this.CreateBookAsync(requestInfo, cancellationToken);
 								throw new InvalidRequestException();
 
@@ -153,17 +151,18 @@ namespace net.vieapps.Services.Books
 						}
 					#endregion
 
-					#region Accounts
-					case "account":
+					#region Account Profiles
+					case "profile":
 						switch (requestInfo.Verb)
 						{
 							case "GET":
-								return await this.GetAccountAsync(requestInfo, cancellationToken);
+								return await this.GetAccountProfileAsync(requestInfo, cancellationToken);
 
 							case "POST":
-								if (requestInfo.Query.ContainsKey("x-convert"))
-									return await this.CreateAccountAsync(requestInfo, cancellationToken);
-								throw new InvalidRequestException();
+								return await this.CreateAccountProfileAsync(requestInfo, cancellationToken);
+
+							case "PUT":
+								return await this.UpdateAccountProfileAsync(requestInfo, cancellationToken);
 
 							default:
 								throw new MethodNotAllowedException(requestInfo.Verb);
@@ -189,7 +188,7 @@ namespace net.vieapps.Services.Books
 				// unknown
 				var msg = "The request is invalid [" + this.ServiceURI + "]: " + requestInfo.Verb + " /";
 				if (!string.IsNullOrWhiteSpace(requestInfo.ObjectName))
-					msg += requestInfo.ObjectName + (requestInfo.Query.ContainsKey("object-identity") ? "/" + requestInfo.Query["object-identity"] : "");
+					msg += requestInfo.ObjectName + (!string.IsNullOrWhiteSpace(requestInfo.GetObjectIdentity()) ? "/" + requestInfo.GetObjectIdentity() : "");
 				throw new InvalidRequestException(msg);
 			}
 			catch (Exception ex)
@@ -372,47 +371,79 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Get account
-		async Task<JObject> GetAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		#region Create account profile
+		async Task<JObject> CreateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			var account = await Account.GetAsync<Account>(requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID);
-			if (account == null)
-				throw new InformationNotFoundException();
-
-			var json = await this.CallServiceAsync(new RequestInfo(requestInfo.Session)
+			// convert
+			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
-				ServiceName = "users",
-				ObjectName = "profile",
-				Query = new Dictionary<string, string>()
-				{
-					{ "object-identity", account.ID }
-				}
-			}, cancellationToken);
+				if (!requestInfo.Session.User.IsSystemAdministrator)
+					throw new AccessDeniedException();
 
-			var data = account.ToJson();
-			foreach (var info in data)
-				if (!info.Key.IsEquals("ID"))
-					json.Add(info.Key, info.Value);
+				var account = new Account();
+				account.CopyFrom(requestInfo.GetBodyJson());
 
-			return json;
+				await Account.CreateAsync(account, cancellationToken);
+				return account.ToJson();
+			}
+
+			// create account profile
+			else
+			{
+				var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
+				var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+				if (!gotRights)
+					throw new AccessDeniedException();
+
+				var account = new Account();
+				account.CopyFrom(requestInfo.GetBodyJson());
+
+				await Account.CreateAsync(account, cancellationToken);
+				return account.ToJson();
+			}
 		}
 		#endregion
 
-		#region Create account
-		async Task<JObject> CreateAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		#region Get account profile
+		async Task<JObject> GetAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			if (!this.IsAuthenticated(requestInfo) || !requestInfo.Session.User.IsSystemAdministrator)
+			// check permissions
+			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
+			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+			if (!gotRights)
+				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.View);
+			if (!gotRights)
 				throw new AccessDeniedException();
 
-			var account = new Account();
-			account.CopyFrom(requestInfo.GetBodyJson());
+			var account = await Account.GetAsync<Account>(id, cancellationToken);
+			if (account == null)
+				throw new InformationNotFoundException();
 
-			await Account.CreateAsync(account, cancellationToken);
 			return account.ToJson();
 		}
 		#endregion
 
-		#region Files
+		#region Update account profile
+		async Task<JObject> UpdateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
+			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+			if (!gotRights)
+				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.View);
+			if (!gotRights)
+				throw new AccessDeniedException();
+
+			var account = await Account.GetAsync<Account>(id, cancellationToken);
+			if (account == null)
+				throw new InformationNotFoundException();
+
+			account.CopyFrom(requestInfo.GetBodyJson());
+			await Account.UpdateAsync(account, cancellationToken);
+			return account.ToJson();
+		}
+		#endregion
+
+		#region Working with files
 		JObject CopyFiles(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// prepare
