@@ -41,10 +41,6 @@ namespace net.vieapps.Services.Books
 			this.ID = "";
 			this.Level = Level.Normal;
 			this.Reputation = Reputation.Unknown;
-			this.TotalSpent = 0.0d;
-			this.TotalSold = 0.0d;
-			this.Deposit = 0.0d;
-			this.Debt = 0.0d;
 			this.TotalPoints = 0;
 			this.RestPoints = 0;
 			this.TotalRewards = 0;
@@ -89,18 +85,6 @@ namespace net.vieapps.Services.Books
 
 		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable]
 		public Reputation Reputation { get; set; }
-
-		[Sortable(IndexName = "Statistics")]
-		public double TotalSpent { get; set; }
-
-		[Sortable(IndexName = "Statistics")]
-		public double TotalSold { get; set; }
-
-		[Sortable(IndexName = "Statistics")]
-		public double Deposit { get; set; }
-
-		[Sortable(IndexName = "Statistics")]
-		public double Debt { get; set; }
 
 		[Sortable(IndexName = "Statistics")]
 		public int TotalPoints { get; set; }

@@ -63,6 +63,7 @@
     <Compile Include="Book.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Counter.cs" />
+    <Compile Include="Statistics.cs" />
     <Compile Include="Utility.cs" />
     <Compile Include="RatingPoint.cs" />
   </ItemGroup>

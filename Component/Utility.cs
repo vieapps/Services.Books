@@ -115,6 +115,17 @@ namespace net.vieapps.Services.Books
 		}
 
 		/// <summary>
+		/// Gets the folder of contributed files
+		/// </summary>
+		public static string FolderOfContributedFiles
+		{
+			get
+			{
+				return Utility.FilesPath + "contributions";
+			}
+		}
+
+		/// <summary>
 		/// Gets the folder of temp files
 		/// </summary>
 		public static string FolderOfTempFiles
@@ -280,6 +291,38 @@ namespace net.vieapps.Services.Books
 			return result;
 		}
 
+		public static string GetAuthorName(string author)
+		{
+			var start = author.IndexOf(",");
+			if (start > 0)
+				return author.Substring(0, start);
+
+			var name = author.GetNormalized();
+			var indicators = new List<string>() { "(", "[", "{", "<" };
+			foreach (var indicator in indicators)
+			{
+				start = name.IndexOf(indicator);
+				while (start > -1)
+				{
+					name = name.Remove(start).Trim();
+					start = name.IndexOf(indicator);
+				}
+			}
+
+			indicators = new List<string>() { ".", " ", "-" };
+			foreach (var indicator in indicators)
+			{
+				start = name.IndexOf(indicator);
+				while (start > -1)
+				{
+					name = name.Remove(0, start + indicator.Length).Trim();
+					start = name.IndexOf(indicator);
+				}
+			}
+
+			return name;
+		}
+
 		public static string GetFileSize(string filePath)
 		{
 			var fileInfo = new FileInfo(filePath);
@@ -369,7 +412,7 @@ namespace net.vieapps.Services.Books
 		{
 			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/"
 				+ (book != null
-					? book.Name.Url64Encode() + "/" + book.PermanentID + "/"
+					? book.Title.Url64Encode() + "/" + book.PermanentID + "/"
 					: "no-media-file".Url64Encode() + "/book.png");
 		}
 
@@ -382,7 +425,64 @@ namespace net.vieapps.Services.Books
 
 		public static string GetDownloadUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.Name.GetANSIUri();
+			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.Title.GetANSIUri();
+		}
+		#endregion
+
+		#region Statistics
+		static Statistics _Categories = null;
+
+		internal static Statistics Categories
+		{
+			get
+			{
+				if (Utility._Categories == null)
+				{
+					Utility._Categories = new Statistics();
+					Utility._Categories.Load(Utility.FolderOfStatisticFiles, "categories.json");
+				}
+				return Utility._Categories;
+			}
+		}
+
+		static Statistics _Authors = null;
+
+		internal static Statistics Authors
+		{
+			get
+			{
+				if (Utility._Authors == null)
+				{
+					Utility._Authors = new Statistics();
+					Utility._Authors.Load(Utility.FolderOfStatisticFiles, "authors-{0}.json", true);
+				}
+				return Utility._Authors;
+			}
+		}
+
+		static Statistics _Status = null;
+
+		internal static Statistics Status
+		{
+			get
+			{
+				if (Utility._Status == null)
+				{
+					Utility._Status = new Statistics();
+					Utility._Status.Load(Utility.FolderOfStatisticFiles, "status.json");
+					if (Utility._Status.Count < 1)
+						(new List<string>() { "Books", "Authors" }).ForEach(name =>
+						{
+							Utility._Status.Add(new StatisticInfo()
+							{
+								Name = name,
+								Counters = 0
+							});
+						});
+					Utility._Status.Save(Utility.FolderOfStatisticFiles, "status.json");
+				}
+				return Utility._Status;
+			}
 		}
 		#endregion
 

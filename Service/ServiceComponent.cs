@@ -64,7 +64,8 @@ namespace net.vieapps.Services.Books
 				this.CreateFolder(Utility.FolderOfDataFiles, false);
 				foreach (var @char in Utility.Chars)
 					this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower());
-				this.CreateFolder(Utility.FolderOfStatisticFiles);
+				this.CreateFolder(Utility.FolderOfStatisticFiles, false);
+				this.CreateFolder(Utility.FolderOfContributedFiles);
 				this.CreateFolder(Utility.FolderOfTempFiles);
 				this.CreateFolder(Utility.FolderOfTrashFiles);
 			}
@@ -123,16 +124,16 @@ namespace net.vieapps.Services.Books
 				switch (requestInfo.ObjectName.ToLower())
 				{
 					case "book":
-						return await this.ProcessBooksAsync(requestInfo, cancellationToken);
+						return await this.ProcessBookAsync(requestInfo, cancellationToken);
 
 					case "statistic":
-						return await this.ProcessStatisticsAsync(requestInfo, cancellationToken);
+						return await this.ProcessStatisticAsync(requestInfo, cancellationToken);
 
 					case "profile":
-						return await this.ProcessAccountProfilesAsync(requestInfo, cancellationToken);
+						return await this.ProcessProfileAsync(requestInfo, cancellationToken);
 
 					case "file":
-						return await this.ProcessFilesAsync(requestInfo, cancellationToken);
+						return await this.ProcessFileAsync(requestInfo, cancellationToken);
 				}
 
 				// unknown
@@ -217,7 +218,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		Task<JObject> ProcessBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			switch (requestInfo.Verb)
 			{
@@ -301,7 +302,7 @@ namespace net.vieapps.Services.Books
 
 			var result = new JObject()
 			{
-				{ "FilterBy", filter?.ToClientJson(query) },
+				{ "FilterBy", (filter ?? new FilterBys<Book>()).ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
 				{ "Pagination", pagination.GetPagination() },
 				{ "Objects", objects.ToJsonArray() }
@@ -346,30 +347,104 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		Task<JObject> ProcessStatisticsAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		async Task<JObject> ProcessStatisticAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+			// prepre
+			var objectIdentity = requestInfo.GetObjectIdentity();
+
+			// individual statistic
+			if ("status".IsEquals(objectIdentity))
+				return this.GetStatisticsOfServiceStatus();
+
+			else if ("categories".IsEquals(objectIdentity))
+				return this.GetStatisticsOfCategories();
+
+			else if ("authors".IsEquals(objectIdentity))
+				return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+
+			// all statistics (via RTU)
+			else
+			{
+				var messages = new List<BaseMessage>()
+				{
+					new BaseMessage()
+					{
+						Type = "Books#Statistic#Status",
+						Data = this.GetStatisticsOfServiceStatus()
+					},
+					new BaseMessage()
+					{
+						Type = "Books#Statistic#Categories",
+						Data = this.GetStatisticsOfCategories()
+					}
+				};
+				Utility.Chars.ForEach(@char =>
+				{
+					var data = this.GetStatisticsOfAuthors(@char);
+					data.Add(new JProperty("Char", @char));
+
+					messages.Add(new BaseMessage()
+					{
+						Type = "Books#Statistic#Authors",
+						Data = data
+					});
+				});
+
+				await this.SendUpdateMessagesAsync(messages, requestInfo.Session.DeviceID, null, cancellationToken);
+
+				return new JObject();
+			}
 		}
 
-		Task<JObject> ProcessAccountProfilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		#region Get statistics
+		JObject GetStatisticsOfServiceStatus()
+		{
+			return new JObject()
+			{
+				{ "Total", Utility.Status.Count },
+				{ "Objects", Utility.Status.ToJson() }
+			};
+		}
+
+		JObject GetStatisticsOfCategories()
+		{
+			return new JObject()
+			{
+				{ "Total", Utility.Categories.Count },
+				{ "Objects", Utility.Categories.ToJson() }
+			};
+		}
+
+		JObject GetStatisticsOfAuthors(string @char)
+		{
+			var authors = Utility.Authors.Find(@char).ToList();
+			return new JObject()
+			{
+				{ "Total", authors.Count },
+				{ "Objects", authors.ToJArray(a => a.ToJson()) }
+			};
+		}
+		#endregion
+
+		Task<JObject> ProcessProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			switch (requestInfo.Verb)
 			{
 				case "GET":
-					return this.GetAccountProfileAsync(requestInfo, cancellationToken);
+					return this.GetProfileAsync(requestInfo, cancellationToken);
 
 				case "POST":
-					return this.CreateAccountProfileAsync(requestInfo, cancellationToken);
+					return this.CreateProfileAsync(requestInfo, cancellationToken);
 
 				case "PUT":
-					return this.UpdateAccountProfileAsync(requestInfo, cancellationToken);
+					return this.UpdateProfileAsync(requestInfo, cancellationToken);
 			}
 
 			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
 		}
 
 		#region Create an account profile
-		async Task<JObject> CreateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		async Task<JObject> CreateProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// prepare identity
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
@@ -399,7 +474,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Get an account profile
-		async Task<JObject> GetAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		async Task<JObject> GetProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
@@ -419,13 +494,13 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Update an account profile
-		async Task<JObject> UpdateAccountProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		async Task<JObject> UpdateProfileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
 			if (!gotRights)
-				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.View);
+				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.Update);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
@@ -443,7 +518,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		Task<JObject> ProcessFilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		Task<JObject> ProcessFileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// convert file
 			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
