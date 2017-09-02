@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
+using Newtonsoft.Json.Linq;
+
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Caching;
 using net.vieapps.Components.Repository;
@@ -37,10 +39,6 @@ namespace net.vieapps.Services.Books
 		static CacheManager _Cache = new CacheManager("VIEApps-Services-Books", "Sliding", Utility.CacheTime);
 
 		public static CacheManager Cache { get { return Utility._Cache; } }
-
-		static CacheManager _DataCache = new CacheManager("VIEApps-Services-Books-Data", "Absolute", Utility.CacheTime);
-
-		public static CacheManager DataCache { get { return Utility._DataCache; } }
 		#endregion
 
 		#region Configuration settings
@@ -329,7 +327,7 @@ namespace net.vieapps.Services.Books
 			if (!fileInfo.Exists)
 				return "generating...";
 
-			var fileSize = Convert.ToDouble(fileInfo.Length);
+			var fileSize = fileInfo.Length.CastAs<double>();
 			var size = fileSize / (1024 * 1024);
 			if (size >= 1.0d)
 				return size.ToString("##0.##") + " MBytes";
@@ -413,7 +411,7 @@ namespace net.vieapps.Services.Books
 			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/"
 				+ (book != null
 					? book.Title.Url64Encode() + "/" + book.PermanentID + "/"
-					: "no-media-file".Url64Encode() + "/book.png");
+					: "no-media-file".Url64Encode() + "/no/cover/image.png");
 		}
 
 		public static string NormalizeMediaFileUris(this string content, Book book)
@@ -426,6 +424,26 @@ namespace net.vieapps.Services.Books
 		public static string GetDownloadUri(this Book book)
 		{
 			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.Title.GetANSIUri();
+		}
+		#endregion
+
+		#region Working with JSON of books
+		internal static void CopyData(this Book book, JObject json)
+		{
+			book.PermanentID = (json["PermanentID"] as JValue).Value as string;
+			book.SourceUrl = json["SourceUrl"] != null
+				? (json["SourceUrl"] as JValue).Value as string
+				: "";
+
+			book.TOCs = new List<string>();
+			var array = json["TOCs"] as JArray;
+			foreach (JValue item in array)
+				book.TOCs.Add(item.Value as string);
+
+			book.Chapters = new List<string>();
+			array = json["Chapters"] as JArray;
+			foreach (JValue item in array)
+				book.Chapters.Add((item.Value as string).NormalizeMediaFileUris(book));
 		}
 		#endregion
 

@@ -117,7 +117,7 @@ namespace net.vieapps.Services.Books
 						this._PermanentID = UtilityService.GetUUID();
 					else
 					{
-						this._PermanentID = Utility.GetDataFromJsonFile(Utility.FolderOfDataFiles + @"\" + this.Name.GetFirstChar() + @"\" + this.Name + ".json", "PermanentID");
+						this._PermanentID = Utility.GetDataFromJsonFile(Utility.FolderOfDataFiles + @"\" + this.Title.GetFirstChar() + @"\" + this.Name + ".json", "PermanentID");
 						Utility.Cache.Set(this);
 					}
 				}
@@ -172,6 +172,7 @@ namespace net.vieapps.Services.Books
 		public JObject ToJson(bool addTypeOfExtendedProperties, bool asNormalized)
 		{
 			var json = base.ToJson(addTypeOfExtendedProperties);
+
 			if (asNormalized)
 			{
 				json["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
@@ -180,12 +181,6 @@ namespace net.vieapps.Services.Books
 
 				json.Add(new JProperty("Chapters", new JArray()));
 				json.Add(new JProperty("TOCs", new JArray()));
-
-				json.Add(new JProperty("Downloads", new JObject()
-				{
-					{ "Epub", this.GetDownloadUri() + ".epub" },
-					{ "Mobi", this.GetDownloadUri() + ".mobi" }
-				}));
 			}
 
 			return json;

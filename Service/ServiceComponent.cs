@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.IO;
+using System.Text;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -65,7 +66,9 @@ namespace net.vieapps.Services.Books
 				foreach (var @char in Utility.Chars)
 					this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower());
 				this.CreateFolder(Utility.FolderOfStatisticFiles, false);
-				this.CreateFolder(Utility.FolderOfContributedFiles);
+				this.CreateFolder(Utility.FolderOfContributedFiles, false);
+				this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
+				this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
 				this.CreateFolder(Utility.FolderOfTempFiles);
 				this.CreateFolder(Utility.FolderOfTrashFiles);
 			}
@@ -225,7 +228,8 @@ namespace net.vieapps.Services.Books
 				case "GET":
 					if ("search".IsEquals(requestInfo.GetObjectIdentity()))
 						return this.SearchBooksAsync(requestInfo, cancellationToken);
-					return Task.FromException<JObject>(new InvalidRequestException());
+					else
+						return this.GetBookAsync(requestInfo, cancellationToken);
 
 				case "POST":
 					return this.CreateBookAsync(requestInfo, cancellationToken);
@@ -246,13 +250,13 @@ namespace net.vieapps.Services.Books
 
 			var query = request.Get<string>("FilterBy.Query");
 
-			var filter = request.Has("FilterBy")
-				? request.Get<ExpandoObject>("FilterBy").ToFilterBy<Book>()
-				: null;
+			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>();
+			if (filter == null)
+				filter = Filters<Book>.NotEquals("Status", "Inactive");
+			else if (filter is FilterBys<Book> && (filter as FilterBys<Book>).Children.FirstOrDefault(e => (e as FilterBy<Book>).Attribute.IsEquals("Status")) == null)
+				(filter as FilterBys<Book>).Children.Add(Filters<Book>.NotEquals("Status", "Inactive"));
 
-			var sort = request.Has("SortBy")
-				? request.Get<ExpandoObject>("SortBy").ToSortBy<Book>()
-				: null;
+			var sort = request.Get<ExpandoObject>("SortBy", null)?.ToSortBy<Book>();
 			if (sort == null && string.IsNullOrWhiteSpace(query))
 				sort = Sorts<Book>.Descending("LastUpdated");
 
@@ -263,12 +267,12 @@ namespace net.vieapps.Services.Books
 			var pageNumber = pagination.Item4;
 
 			// check cache
-			var cacheKey = string.IsNullOrWhiteSpace(query) && (filter != null || sort != null)
-				? (filter != null ? filter.GetMD5() + ":" : "") + (sort != null ? sort.GetMD5() + ":" : "") + pageNumber.ToString()
+			var cacheKey = string.IsNullOrWhiteSpace(query)
+				? this.GetCacheKey<Book>(filter, sort)
 				: "";
 
 			var json = !cacheKey.Equals("")
-				? await Utility.DataCache.GetAsync<string>(cacheKey + "-json")
+				? await Utility.Cache.GetAsync<string>(cacheKey + ":" + pageNumber.ToString() + "-json")
 				: "";
 
 			if (!string.IsNullOrWhiteSpace(json))
@@ -293,7 +297,7 @@ namespace net.vieapps.Services.Books
 			// search
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
-					? await Book.FindAsync(filter, sort, pageSize, pageNumber, cacheKey, cancellationToken)
+					? await Book.FindAsync(filter, sort, pageSize, pageNumber, cacheKey + ":" + pageNumber.ToString(), cancellationToken)
 					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken)
 				: new List<Book>();
 
@@ -316,7 +320,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				Utility.DataCache.Set(cacheKey + "-json", json);
+				Utility.Cache.SetAbsolute(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
 			}
 
 			// return the result
@@ -330,7 +334,7 @@ namespace net.vieapps.Services.Books
 			// check permission on convert
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
-				if (!requestInfo.Session.User.IsSystemAdministrator)
+				if (!await this.IsSystemAdministratorAsync(requestInfo))
 					throw new AccessDeniedException();
 			}
 
@@ -344,6 +348,110 @@ namespace net.vieapps.Services.Books
 			var book = requestInfo.GetBodyJson().Copy<Book>();
 			await Book.CreateAsync(book, cancellationToken);
 			return book.ToJson();
+		}
+		#endregion
+
+		#region Get a book
+		async Task<JObject> GetBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			// get the book
+			var objectIdentity = requestInfo.GetObjectIdentity();
+
+			var id = !string.IsNullOrWhiteSpace(objectIdentity) && objectIdentity.IsValidUUID()
+				? objectIdentity
+				: requestInfo.Query.ContainsKey("id")
+					? requestInfo.Query["id"]
+					: null;
+
+			var book = await Book.GetAsync<Book>(id, cancellationToken);
+			if (book == null)
+				throw new InformationNotFoundException();
+
+			// load from JSON file if has no chapter
+			Book bookJSON = null;
+			if (id.Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
+			{
+				var keyJSON = id.GetCacheKey<Book>() + "-json";
+				bookJSON = await Utility.Cache.GetAsync<Book>(keyJSON);
+				if (bookJSON == null)
+				{
+					bookJSON = book.Clone();
+					var jsonFilePath = bookJSON.GetFolderPath() + @"\" + bookJSON.Name + ".json";
+					if (File.Exists(jsonFilePath))
+					{
+						bookJSON.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
+						await Utility.Cache.SetAsFragmentsAsync(keyJSON, bookJSON);
+					}
+				}
+			}
+
+			// counters
+			if ("counters".IsEquals(objectIdentity))
+			{
+				// get and update
+				var action = requestInfo.Query["action"].ToEnum<Components.Security.Action>();
+				var counter = book.Counters.FirstOrDefault(c => c.Type.Equals(action));
+				if (counter != null)
+				{
+					counter.LastUpdated = DateTime.Now;
+					counter.Total++;
+					counter.Week = counter.LastUpdated.IsInCurrentWeek() ? counter.Week + 1 : 1;
+					counter.Month = counter.LastUpdated.IsInCurrentMonth() ? counter.Month + 1 : 1;
+					await Book.UpdateAsync(book, cancellationToken);
+				}
+
+				// prepare data
+				var data = new JObject()
+				{
+					{ "ID", book.ID },
+					{ "Counters", book.Counters.ToJArray(c => c.ToJson()) }
+				};
+
+				// send update message
+				await this.SendUpdateMessageAsync(new UpdateMessage()
+				{
+					DeviceID = "*",
+					ExcludedDeviceID = requestInfo.Session.DeviceID,
+					Type = "Books#Book#Counters",
+					Data = data
+				}, cancellationToken);
+
+				// return update
+				return data;
+			}
+
+			// chapter
+			else if (requestInfo.Query.ContainsKey("chapter"))
+			{
+				var chapter = requestInfo.Query["chapter"].CastAs<int>();
+				chapter = chapter < 1
+					? 1
+					: chapter > book.TotalChapters
+						? book.TotalChapters
+						: chapter;
+
+				return new JObject()
+				{
+					{ "ID", book.ID },
+					{ "Chapter", chapter },
+					{ "Content", bookJSON.Chapters[chapter - 1] }
+				};
+			}
+
+			// book information
+			else
+			{
+				// generate
+				var json = book.ToJson();
+
+				// update
+				json["TOCs"] = bookJSON.TOCs.ToJArray(t => new JValue(UtilityService.RemoveTags(t)));
+				if (book.TotalChapters < 2)
+					json.Add(new JProperty("Body", bookJSON.Chapters[0].NormalizeMediaFileUris(book)));
+
+				// return
+				return json;
+			}
 		}
 		#endregion
 
@@ -452,14 +560,14 @@ namespace net.vieapps.Services.Books
 			// check permission on convert
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
-				if (!requestInfo.Session.User.IsSystemAdministrator)
+				if (!await this.IsSystemAdministratorAsync(requestInfo))
 					throw new AccessDeniedException();
 			}
 
 			// check permission on create
 			else
 			{
-				var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+				var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
 				if (!gotRights)
 					throw new AccessDeniedException();
 			}
@@ -478,7 +586,7 @@ namespace net.vieapps.Services.Books
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
-			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
 			if (!gotRights)
 				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.View);
 			if (!gotRights)
@@ -498,7 +606,7 @@ namespace net.vieapps.Services.Books
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
-			var gotRights = requestInfo.Session.User.IsSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
+			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
 			if (!gotRights)
 				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.Update);
 			if (!gotRights)
@@ -522,23 +630,16 @@ namespace net.vieapps.Services.Books
 		{
 			// convert file
 			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
-				try
-				{
-					return Task.FromResult(this.CopyFiles(requestInfo));
-				}
-				catch (Exception ex)
-				{
-					return Task.FromException<JObject>(ex);
-				}
+				return this.CopyFilesAsync(requestInfo);
 
 			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
 		}
 
 		#region Copy files
-		JObject CopyFiles(RequestInfo requestInfo)
+		async Task<JObject> CopyFilesAsync(RequestInfo requestInfo)
 		{
 			// prepare
-			if (!requestInfo.Session.User.IsSystemAdministrator)
+			if (!await this.IsSystemAdministratorAsync(requestInfo))
 				throw new AccessDeniedException();
 
 			var name = requestInfo.Extra != null && requestInfo.Extra.ContainsKey("Name")

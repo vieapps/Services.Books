@@ -48,7 +48,7 @@ namespace net.vieapps.Services.Books
 			this.LastSync = DateTime.Now;
 			this.Favorites = new List<string>();
 			this.Bookmarks = new List<Bookmark>();
-			this.Counters = new List<CounterInfo>();
+			this.RatingPoints = new List<RatingPoint>();
 		}
 
 		#region Bookmark
@@ -107,7 +107,7 @@ namespace net.vieapps.Services.Books
 		public List<Bookmark> Bookmarks { get; set; }
 
 		[AsJson]
-		public List<CounterInfo> Counters { get; set; }
+		public List<RatingPoint> RatingPoints { get; set; }
 		#endregion
 
 		#region IBusinessEntity Properties
