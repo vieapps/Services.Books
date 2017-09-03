@@ -55,7 +55,7 @@ namespace net.vieapps.Services.Books
 		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable]
 		public string Author { get; set; }
 
-		[Property(MaxLength = 250)]
+		[Property(MaxLength = 250), Searchable]
 		public string Translator { get; set; }
 
 		[Property(MaxLength = 250), Sortable(IndexName = "Info")]
@@ -164,26 +164,25 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region To JSON
-		public override JObject ToJson(bool addTypeOfExtendedProperties)
+		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted)
 		{
-			return this.ToJson(addTypeOfExtendedProperties, true);
+			return this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
 		}
 
-		public JObject ToJson(bool addTypeOfExtendedProperties, bool asNormalized)
+		public JObject ToJson(bool addTypeOfExtendedProperties = false, Action<JObject> onPreCompleted = null, bool asNormalized = true)
 		{
-			var json = base.ToJson(addTypeOfExtendedProperties);
+			return base.ToJson(addTypeOfExtendedProperties, (obj) => {
+				if (asNormalized)
+				{
+					obj["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
+						? Utility.MediaUri.NormalizeMediaFileUris(null)
+						: this.Cover.NormalizeMediaFileUris(this);
 
-			if (asNormalized)
-			{
-				json["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
-					? Utility.MediaUri.NormalizeMediaFileUris(null)
-					: this.Cover.NormalizeMediaFileUris(this);
-
-				json.Add(new JProperty("Chapters", new JArray()));
-				json.Add(new JProperty("TOCs", new JArray()));
-			}
-
-			return json;
+					obj.Add(new JProperty("Chapters", new JArray()));
+					obj.Add(new JProperty("TOCs", new JArray()));
+				}
+				onPreCompleted?.Invoke(obj);
+			});
 		}
 		#endregion
 

@@ -410,7 +410,7 @@ namespace net.vieapps.Services.Books
 		{
 			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/"
 				+ (book != null
-					? book.Title.Url64Encode() + "/" + book.PermanentID + "/"
+					? book.Title.Url64Encode() + "/" + (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "/"
 					: "no-media-file".Url64Encode() + "/no/cover/image.png");
 		}
 

@@ -557,25 +557,30 @@ namespace net.vieapps.Services.Books
 			// prepare identity
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 
-			// check permission on convert
+			// check permission
+			var isSystemAdministrator = await this.IsSystemAdministratorAsync(requestInfo);
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
-				if (!await this.IsSystemAdministratorAsync(requestInfo))
+				if (!isSystemAdministrator)
 					throw new AccessDeniedException();
 			}
 
 			// check permission on create
 			else
 			{
-				var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
+				var gotRights = isSystemAdministrator || (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id));
 				if (!gotRights)
 					throw new AccessDeniedException();
 			}
 
 			// create account profile
 			var account = requestInfo.GetBodyJson().Copy<Account>();
-			account.ID = id;
 
+			// reassign identity
+			if (requestInfo.Extra == null || !requestInfo.Extra.ContainsKey("x-convert"))
+				account.ID = id;
+
+			// update database
 			await Account.CreateAsync(account, cancellationToken);
 			return account.ToJson();
 		}
