@@ -25,16 +25,25 @@ namespace net.vieapps.Services.Books
 		#region Start
 		public ServiceComponent() { }
 
-		void WriteInfo(string info, Exception ex = null)
+		void WriteInfo(string correlationID, string info, Exception ex = null, bool writeLogs = true)
 		{
+			// prepare
 			var msg = string.IsNullOrWhiteSpace(info)
 				? ex != null ? ex.Message : ""
 				: info;
 
-			Console.WriteLine("~~~~~~~~~~~~~~~~~~~~>");
-			Console.WriteLine(msg);
-			if (ex != null)
-				Console.WriteLine("-----------------------\r\n" + "==> [" + ex.GetType().GetTypeName(true) + "]: " + ex.Message + "\r\n" + ex.StackTrace + "\r\n-----------------------");
+			// write to logs
+			if (writeLogs)
+				this.WriteLog(correlationID ?? UtilityService.NewUID, this.ServiceName, null, msg, ex);
+
+			// write to console
+			if (!Program.AsService)
+			{
+				Console.WriteLine("~~~~~~~~~~~~~~~~~~~~>");
+				Console.WriteLine(msg);
+				if (ex != null)
+					Console.WriteLine("-----------------------\r\n" + "==> [" + ex.GetType().GetTypeName(true) + "]: " + ex.Message + "\r\n" + ex.StackTrace + "\r\n-----------------------");
+			}
 		}
 
 		void CreateFolder(string path, bool mediaFolders = true)
@@ -48,30 +57,37 @@ namespace net.vieapps.Services.Books
 
 		internal void Start(string[] args = null, System.Action nextAction = null, Func<Task> nextActionAsync = null)
 		{
+			// prepare
+			var correlationID = UtilityService.NewUID;
+
 			// initialize repository
 			try
 			{
-				this.WriteInfo("Initializing the repository");
+				this.WriteInfo(correlationID, "Initializing the repository");
 				RepositoryStarter.Initialize();
 			}
 			catch (Exception ex)
 			{
-				this.WriteInfo("Error occurred while initializing the repository", ex);
+				this.WriteInfo(correlationID, "Error occurred while initializing the repository", ex);
 			}
 
 			// prepare folders
 			if (Directory.Exists(Utility.FilesPath))
-			{
-				this.CreateFolder(Utility.FolderOfDataFiles, false);
-				foreach (var @char in Utility.Chars)
-					this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower());
-				this.CreateFolder(Utility.FolderOfStatisticFiles, false);
-				this.CreateFolder(Utility.FolderOfContributedFiles, false);
-				this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
-				this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
-				this.CreateFolder(Utility.FolderOfTempFiles);
-				this.CreateFolder(Utility.FolderOfTrashFiles);
-			}
+				try
+				{
+					this.CreateFolder(Utility.FolderOfDataFiles, false);
+					Utility.Chars.ForEach(@char => this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower()));
+					this.CreateFolder(Utility.FolderOfStatisticFiles, false);
+					this.CreateFolder(Utility.FolderOfContributedFiles, false);
+					this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
+					this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
+					this.CreateFolder(Utility.FolderOfTempFiles);
+					this.CreateFolder(Utility.FolderOfTrashFiles);
+				}
+				catch (Exception ex)
+				{
+					this.WriteInfo(correlationID, "Error occurred while preparing the folders of the service", ex);
+				}
 
 			// start the service
 			Task.Run(async () =>
@@ -79,19 +95,19 @@ namespace net.vieapps.Services.Books
 				try
 				{
 					await this.StartAsync(
-						() => {
-							var pid = Process.GetCurrentProcess().Id.ToString();
-							this.WriteInfo("The service is registered - PID: " + pid);
-							this.WriteLog(UtilityService.BlankUID, this.ServiceName, null, "The service [" + this.ServiceURI + "] is registered - PID: " + pid);
+						() =>
+						{
+							this.WriteInfo(correlationID, "The service is registered - PID: " + Process.GetCurrentProcess().Id.ToString());
 						},
-						(ex) => {
-							this.WriteInfo("Error occurred while registering the service", ex);
+						(ex) =>
+						{
+							this.WriteInfo(correlationID, "Error occurred while registering the service", ex);
 						}
 					);
 				}
 				catch (Exception ex)
 				{
-					this.WriteInfo("Error occurred while starting the service", ex);
+					this.WriteInfo(correlationID, "Error occurred while starting the service", ex);
 				}
 			})
 			.ContinueWith(async (task) =>
@@ -102,7 +118,7 @@ namespace net.vieapps.Services.Books
 				}
 				catch (Exception ex)
 				{
-					this.WriteInfo("Error occurred while running the next action (sync)", ex);
+					this.WriteInfo(correlationID, "Error occurred while running the next action (sync)", ex);
 				}
 				if (nextActionAsync != null)
 					try
@@ -111,7 +127,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						this.WriteInfo("Error occurred while running the next action (async)", ex);
+						this.WriteInfo(correlationID, "Error occurred while running the next action (async)", ex);
 					}
 			})
 			.ConfigureAwait(false);
@@ -122,6 +138,9 @@ namespace net.vieapps.Services.Books
 
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
+#if DEBUG
+			this.WriteInfo(requestInfo.CorrelationID, "Process the request\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), null, false);
+#endif
 			try
 			{
 				switch (requestInfo.ObjectName.ToLower())
@@ -147,11 +166,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-#if DEBUG
-				this.WriteInfo("Error occurred while processing\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), ex);
-#else
-				this.WriteInfo("Error occurred while processing - Correlation ID: " + requestInfo.CorrelationID);
-#endif
+				this.WriteInfo(requestInfo.CorrelationID, "Error occurred while processing\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), ex);
 				throw this.GetRuntimeException(requestInfo, ex);
 			} 
 		}
@@ -393,10 +408,10 @@ namespace net.vieapps.Services.Books
 				var counter = book.Counters.FirstOrDefault(c => c.Type.Equals(action));
 				if (counter != null)
 				{
-					counter.LastUpdated = DateTime.Now;
 					counter.Total++;
 					counter.Week = counter.LastUpdated.IsInCurrentWeek() ? counter.Week + 1 : 1;
 					counter.Month = counter.LastUpdated.IsInCurrentMonth() ? counter.Month + 1 : 1;
+					counter.LastUpdated = DateTime.Now;
 					await Book.UpdateAsync(book, cancellationToken);
 				}
 
