@@ -32,8 +32,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\</OutputPath>
-    <DefineConstants>
-    </DefineConstants>
+    <DefineConstants>GENERATORLOGS</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
@@ -219,6 +218,10 @@
     <ProjectReference Include="..\..\Base\VIEApps.Services.Base.csproj">
       <Project>{c496cef5-9ff8-4364-9860-fcdefed4e277}</Project>
       <Name>VIEApps.Services.Base</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Component.Epub.Generator\dotNetEpub\VIEApps.Services.Books.Component.Epub.Generator.csproj">
+      <Project>{382299de-6c02-4587-864f-2218bd3a1935}</Project>
+      <Name>VIEApps.Services.Books.Component.Epub.Generator</Name>
     </ProjectReference>
     <ProjectReference Include="..\Component\VIEApps.Services.Books.Component.csproj">
       <Project>{0f090593-616c-40f0-aa59-b8db69bc2920}</Project>

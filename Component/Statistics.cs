@@ -136,7 +136,7 @@ namespace net.vieapps.Services.Books
 
 		public JToken ToJson()
 		{
-			return this.List.ToJArray(i => i.ToJson());
+			return this.List.ToJArray();
 		}
 		#endregion
 
@@ -155,21 +155,15 @@ namespace net.vieapps.Services.Books
 							{
 								Name = item.Name,
 								Counters = item.Counters,
-								FirstChar = Utility.GetAuthorName(item.Name).GetFirstChar().ToUpper(),
-								Parent = item.Parent,
-								Children = item.Children
+								FirstChar = Utility.GetAuthorName(item.Name).GetFirstChar().ToUpper()
 							};
-							info.Children?.ForEach(c => c.Parent = info);
 
 							this.List.Add(info);
 						});
 				});
 
 			else if (File.Exists(filePath))
-			{
 				this.List.Append(UtilityService.ReadTextFile(filePath).FromJson<List<StatisticInfo>>());
-				this.List.ForEach(item => item.Children?.ForEach(c => c.Parent = item));
-			}
 		}
 
 		internal void Save(string path, string filename, bool seperatedByFirstChar = false)
@@ -181,7 +175,7 @@ namespace net.vieapps.Services.Books
 				{
 					var list = this.Find(@char);
 					if (list != null)
-						UtilityService.WriteTextFile(string.Format(filePath, @char), list.ToJArray(i => i.ToJson()).ToString(Formatting.Indented));
+						UtilityService.WriteTextFile(string.Format(filePath, @char), list.ToJArray().ToString(Formatting.Indented));
 				});
 
 			else
@@ -200,19 +194,12 @@ namespace net.vieapps.Services.Books
 		{
 			this.Name = "";
 			this.Counters = 0;
-			this.Parent = null;
-			this.Children = new List<StatisticInfo>();
 		}
 
 		#region Properties
 		public string Name { get; set; }
 
 		public int Counters { get; set; }
-
-		[JsonIgnore]
-		public StatisticInfo Parent { get; set; }
-
-		public List<StatisticInfo> Children { get; set; }
 
 		[NonSerialized]
 		string _FirstChar = null;
@@ -231,15 +218,6 @@ namespace net.vieapps.Services.Books
 				return this._FirstChar;
 			}
 		}
-
-		[JsonIgnore]
-		public string FullName
-		{
-			get
-			{
-				return (this.Parent != null ? this.Parent.Name + " > " : "") + this.Name;
-			}
-		}
 		#endregion
 
 		#region Methods
@@ -248,30 +226,9 @@ namespace net.vieapps.Services.Books
 			return this.Name.ToLower().GetHashCode();
 		}
 
-		public JObject ToJson()
-		{
-			var json = new JObject()
-			{
-				{ "Name", this.Name },
-				{ "Counters", this.Counters }
-			};
-
-			if (this.Children != null && this.Children.Count > 0)
-				json.Add(new JProperty("Children", this.Children.ToJArray(c => c.ToJson())));
-
-			return json;
-		}
-
 		public override string ToString()
 		{
 			return this.ToJson().ToString(Formatting.None);
-		}
-
-		public StatisticInfo FindFirstChild(string name)
-		{
-			return !string.IsNullOrWhiteSpace(name)
-				? this.Children.FirstOrDefault(item => item.Name.IsEquals(name))
-				: null;
 		}
 		#endregion
 

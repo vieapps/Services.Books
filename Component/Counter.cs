@@ -20,12 +20,11 @@ namespace net.vieapps.Services.Books
 
 		public CounterBase()
 		{
-			this.Type = Components.Security.Action.View;
+			this.Type = "View";
 			this.Total = 0;
 		}
 
-		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String)]
-		public Components.Security.Action Type { get; set; }
+		public string Type { get; set; }
 
 		public int Total { get; set; }
 

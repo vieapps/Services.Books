@@ -124,7 +124,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// check permissions
-			if (context.User == null || !(context.User is UserIdentity) || !(context.User as UserIdentity).IsAuthenticated)
+			if (context.User == null || !(context.User is UserPrincipal) || !(context.User as UserPrincipal).IsAuthenticated)
 				throw new AccessDeniedException();
 
 			// parse
@@ -148,9 +148,22 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + name + ext);
+			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + UtilityService.GetNormalizedFilename(name) + ext);
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
+
+			// send inter-communicate message to track logs
+			var message = new CommunicateMessage()
+			{
+				ServiceName = "Books",
+				Type = "Download",
+				Data = new JObject()
+				{
+					{ "UserID", context.User.Identity.Name },
+					{ "BookID", requestInfo[3].Url64Decode() },
+				}
+			};
+			await this.SendInterCommunicateMessageAsync(message, cancellationToken);
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -169,29 +182,7 @@ namespace net.vieapps.Services.Books
 					: fileInfo.Name.IsEndsWith(".json")
 						?"json"
 						: "octet-stream";
-			await context.WriteFileToOutputAsync(fileInfo, "application/" + contentType, eTag, name, cancellationToken);
-
-			// send inter-communicate message to track counters & logs
-			var message = new CommunicateMessage()
-			{
-				ServiceName = "books",
-				Type = "Book",
-				Data = new JObject()
-				{
-					{ "Verb", "Download" },
-					{ "UserID", (context.User as UserIdentity).ID },
-					{ "Environment", new JObject()
-						{
-							{ "IP", context.Request.UserHostAddress },
-							{ "UserAgent", context.Request.UserAgent },
-							{ "UrlReferer", context.Request.UrlReferrer?.AbsoluteUri },
-							{ "Query", new JValue(context.Request.QueryString.ToDictionary()) },
-							{ "Header", new JValue(context.Request.Headers.ToDictionary()) }
-						}
-					}
-				}
-			};
-			await this.SendInterCommunicateMessageAsync(message, cancellationToken);
+			await context.WriteFileToOutputAsync(fileInfo, "application/" + contentType, eTag, UtilityService.GetNormalizedFilename(name) + ext, cancellationToken);
 		}
 
 		async Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)

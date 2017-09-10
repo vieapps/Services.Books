@@ -359,6 +359,7 @@ namespace net.vieapps.Services.Books
 
 		public static string GetDataFromJsonFile(string filePath, string attribute)
 		{
+			filePath = UtilityService.GetNormalizedFilename(filePath);
 			if (!File.Exists(filePath) || string.IsNullOrWhiteSpace(attribute))
 				return "";
 
@@ -421,9 +422,24 @@ namespace net.vieapps.Services.Books
 				: content.Replace(Utility.MediaUri, book.GetMediaFileUri());
 		}
 
+		public static string GetMediaFilePath(this Book book)
+		{
+			return book.GetFolderPath() + @"\" + Utility.MediaFolder + @"\"
+				+ (book != null
+					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
+					: "no-media-file".Url64Encode() + "/no/cover/image.png");
+		}
+
+		public static string NormalizeMediaFilePaths(this string content, Book book)
+		{
+			return string.IsNullOrWhiteSpace(content)
+				? content
+				: content.Replace(Utility.MediaUri, book.GetMediaFilePath());
+		}
+
 		public static string GetDownloadUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.Title.GetANSIUri();
+			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
 		}
 		#endregion
 
@@ -443,7 +459,7 @@ namespace net.vieapps.Services.Books
 			book.Chapters = new List<string>();
 			array = json["Chapters"] as JArray;
 			foreach (JValue item in array)
-				book.Chapters.Add((item.Value as string).NormalizeMediaFileUris(book));
+				book.Chapters.Add(item.Value as string);
 		}
 		#endregion
 

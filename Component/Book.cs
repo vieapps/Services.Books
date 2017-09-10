@@ -1,5 +1,6 @@
 ﻿#region Related components
 using System;
+using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
 
@@ -38,8 +39,8 @@ namespace net.vieapps.Services.Books
 			this.LastUpdated = DateTime.Now;
 			this.Counters = new List<CounterInfo>()
 			{
-				new CounterInfo() { Type = Components.Security.Action.View },
-				new CounterInfo() { Type = Components.Security.Action.Download }
+				new CounterInfo() { Type = "View" },
+				new CounterInfo() { Type = "Download" }
 			};
 			this.RatingPoints = new List<RatingPoint>();
 			this.TOCs = new List<string>();
@@ -171,7 +172,8 @@ namespace net.vieapps.Services.Books
 
 		public JObject ToJson(bool addTypeOfExtendedProperties = false, Action<JObject> onPreCompleted = null, bool asNormalized = true)
 		{
-			return base.ToJson(addTypeOfExtendedProperties, (obj) => {
+			return base.ToJson(addTypeOfExtendedProperties, obj =>
+			{
 				if (asNormalized)
 				{
 					obj["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
@@ -180,9 +182,53 @@ namespace net.vieapps.Services.Books
 
 					obj.Add(new JProperty("Chapters", new JArray()));
 					obj.Add(new JProperty("TOCs", new JArray()));
+					obj.Add(new JProperty("Files", this.GetFiles()));
+
+					var download = this.Counters.FirstOrDefault(c => c.Type.IsEquals("Download"));
+					if (download != null)
+					{
+						var gotUpdated = false;
+
+						if (!download.LastUpdated.IsInCurrentMonth() && download.Total == download.Month)
+						{
+							download.Month = 0;
+							gotUpdated = true;
+						}
+
+						if (!download.LastUpdated.IsInCurrentWeek() && download.Total == download.Week)
+						{
+							download.Week = 0;
+							gotUpdated = true;
+						}
+
+						if (gotUpdated)
+							obj["Counters"] = this.Counters.ToJArray();
+					}
 				}
 				onPreCompleted?.Invoke(obj);
 			});
+		}
+
+		public JObject GetFiles()
+		{
+			var filePath = this.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(this.Name);
+			var downloadUri = this.GetDownloadUri();
+
+			return new JObject()
+			{
+				{ "Epub", new JObject()
+					{
+						{ "Size", Utility.GetFileSize(filePath + ".epub") },
+						{ "Url", downloadUri + ".epub" }
+					}
+				},
+				{ "Mobi", new JObject()
+					{
+						{ "Size", Utility.GetFileSize(filePath + ".mobi") },
+						{ "Url", downloadUri + ".mobi" }
+					}
+				}
+			};
 		}
 		#endregion
 
