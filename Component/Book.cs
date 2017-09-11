@@ -180,7 +180,6 @@ namespace net.vieapps.Services.Books
 						? Utility.MediaUri.NormalizeMediaFileUris(null)
 						: this.Cover.NormalizeMediaFileUris(this);
 
-					obj.Add(new JProperty("Chapters", new JArray()));
 					obj.Add(new JProperty("TOCs", new JArray()));
 					obj.Add(new JProperty("Files", this.GetFiles()));
 

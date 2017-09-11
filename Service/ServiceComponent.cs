@@ -89,6 +89,9 @@ namespace net.vieapps.Services.Books
 					this.WriteInfo(correlationID, "Error occurred while preparing the folders of the service", ex);
 				}
 
+			// register timers
+			this.RegisterTimers();
+
 			// start the service
 			Task.Run(async () =>
 			{
@@ -156,6 +159,9 @@ namespace net.vieapps.Services.Books
 
 					case "file":
 						return await this.ProcessFileAsync(requestInfo, cancellationToken);
+
+					case "bookmarks":
+						return await this.ProcessBookmarksAsync(requestInfo, cancellationToken);
 				}
 
 				// unknown
@@ -1211,6 +1217,46 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
+		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID);
+			if (account == null)
+				throw new InformationNotFoundException();
+
+			switch (requestInfo.Verb)
+			{
+				case "GET":
+					return new JObject()
+					{
+						{"ID", account.ID },
+						{ "Objects", account.Bookmarks.ToJArray() }
+					};					
+
+				case "POST":
+					// update bookmarks
+					var bookmarks = requestInfo.GetBodyJson() as JArray;
+					foreach (JObject bookmark in bookmarks)
+						account.Bookmarks.Add(bookmark.FromJson<Account.Bookmark>());
+
+					account.Bookmarks = account.Bookmarks
+						.OrderByDescending(b => b.Time)
+						.Distinct(new Account.BookmarkComparer())
+						.Take(30)
+						.ToList();
+					account.LastSync = DateTime.Now;
+					await Account.UpdateAsync(account, cancellationToken);
+
+					// return
+					return new JObject()
+					{
+						{"ID", account.ID },
+						{ "Objects", account.Bookmarks.ToJArray() }
+					};
+			}
+
+			throw new MethodNotAllowedException(requestInfo.Verb);
+		}
+
 		#region Process inter-communicate messages
 		protected override void ProcessInterCommunicateMessage(CommunicateMessage message)
 		{
@@ -1249,6 +1295,27 @@ namespace net.vieapps.Services.Books
 #else
 				catch { }
 #endif
+		}
+		#endregion
+
+		#region Timers for working with background workers & schedulers
+		internal List<System.Timers.Timer> _timers = new List<System.Timers.Timer>();
+
+		void StartTimer(int interval, Action<object, System.Timers.ElapsedEventArgs> action, bool autoReset = true)
+		{
+			var timer = new System.Timers.Timer()
+			{
+				Interval = interval * 1000,
+				AutoReset = autoReset
+			};
+			timer.Elapsed += new System.Timers.ElapsedEventHandler(action);
+			timer.Start();
+			this._timers.Add(timer);
+		}
+
+		void RegisterTimers()
+		{
+
 		}
 		#endregion
 

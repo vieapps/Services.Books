@@ -11,6 +11,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 using net.vieapps.Components.Security;
 using net.vieapps.Components.Repository;
+using net.vieapps.Components.Utility;
 #endregion
 
 namespace net.vieapps.Services.Books
@@ -57,24 +58,37 @@ namespace net.vieapps.Services.Books
 		{
 			public string ID { get; set; }
 
-			public string Name { get; set; }
-
 			public int Chapter { get; set; }
 
 			public int Position { get; set; }
 
 			public DateTime Time { get; set; }
 
-			public string Device { get; set; }
-
 			public Bookmark()
 			{
 				this.ID = "";
-				this.Name = "";
 				this.Chapter = 0;
 				this.Position = 0;
 				this.Time = DateTime.Now;
-				this.Device = "";
+			}
+		}
+
+		public class BookmarkComparer : IEqualityComparer<Bookmark>
+		{
+			public bool Equals(Bookmark x, Bookmark y)
+			{
+				return object.ReferenceEquals(x, y)
+					? true
+					: object.ReferenceEquals(x, null) || Object.ReferenceEquals(y, null)
+						? false
+						: x.ID.IsEquals(y.ID);
+			}
+
+			public int GetHashCode(Bookmark bookmark)
+			{
+				return object.ReferenceEquals(bookmark, null)
+					? 0
+					: bookmark.ID.GetHashCode();
 			}
 		}
 		#endregion
@@ -100,10 +114,10 @@ namespace net.vieapps.Services.Books
 
 		public DateTime LastSync { get; set; }
 
-		[AsJson]
+		[JsonIgnore, AsJson]
 		public List<string> Favorites { get; set; }
 
-		[AsJson]
+		[JsonIgnore, AsJson]
 		public List<Bookmark> Bookmarks { get; set; }
 
 		[AsJson]
