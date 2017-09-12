@@ -1225,15 +1225,16 @@ namespace net.vieapps.Services.Books
 
 			switch (requestInfo.Verb)
 			{
+				// get bookmarks
 				case "GET":
 					return new JObject()
 					{
 						{"ID", account.ID },
 						{ "Objects", account.Bookmarks.ToJArray() }
-					};					
+					};
 
+				// update bookmarks
 				case "POST":
-					// update bookmarks
 					var bookmarks = requestInfo.GetBodyJson() as JArray;
 					foreach (JObject bookmark in bookmarks)
 						account.Bookmarks.Add(bookmark.FromJson<Account.Bookmark>());
@@ -1246,7 +1247,24 @@ namespace net.vieapps.Services.Books
 					account.LastSync = DateTime.Now;
 					await Account.UpdateAsync(account, cancellationToken);
 
-					// return
+					return new JObject()
+					{
+						{"ID", account.ID },
+						{ "Objects", account.Bookmarks.ToJArray() }
+					};
+
+				// delete a bookmark
+				case "DELETE":
+					var id = requestInfo.GetObjectIdentity();
+					account.Bookmarks = account.Bookmarks
+						.Where(b => !b.ID.IsEquals(id))
+						.OrderByDescending(b => b.Time)
+						.Distinct(new Account.BookmarkComparer())
+						.Take(30)
+						.ToList();
+					account.LastSync = DateTime.Now;
+					await Account.UpdateAsync(account, cancellationToken);
+
 					return new JObject()
 					{
 						{"ID", account.ID },
