@@ -1230,6 +1230,7 @@ namespace net.vieapps.Services.Books
 					return new JObject()
 					{
 						{"ID", account.ID },
+						{"Sync", true },
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
@@ -1265,11 +1266,25 @@ namespace net.vieapps.Services.Books
 					account.LastSync = DateTime.Now;
 					await Account.UpdateAsync(account, cancellationToken);
 
-					return new JObject()
+					var data = new JObject()
 					{
 						{"ID", account.ID },
+						{"Sync", true },
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
+
+					var sessions = await this.GetSessionsAsync(requestInfo);
+					await sessions.Where(s => s.Item4).ForEachAsync(async (session, ctoken) =>
+					{
+						await this.SendUpdateMessageAsync(new UpdateMessage()
+						{
+							Type = "Books#Bookmarks",
+							DeviceID = session.Item2,
+							Data = data
+						}, ctoken);
+					}, cancellationToken);
+
+					return data;
 			}
 
 			throw new MethodNotAllowedException(requestInfo.Verb);
@@ -1333,6 +1348,24 @@ namespace net.vieapps.Services.Books
 
 		void RegisterTimers()
 		{
+			// delete old .EPUB & .MOBI files
+			this.StartTimer(60 * 60, (sender, args) =>
+			{
+				var remainTime = DateTime.Now.AddDays(-30);
+				UtilityService.GetFiles(Utility.FolderOfDataFiles, "*.epub|*.mobi", true)
+					.Where(file => file.LastWriteTime < remainTime)
+					.ToList()
+					.ForEach(file =>
+					{
+						try
+						{
+							file.Delete();
+						}
+						catch { }
+					});
+			});
+
+			// scan new e-books from iSach.info & VnThuQuan.net
 
 		}
 		#endregion
