@@ -29,7 +29,7 @@ namespace net.vieapps.Services.Books
 		{
 			// prepare
 			var msg = string.IsNullOrWhiteSpace(info)
-				? ex != null ? ex.Message : ""
+				? ex?.Message ?? ""
 				: info;
 
 			// write to logs
@@ -39,10 +39,11 @@ namespace net.vieapps.Services.Books
 			// write to console
 			if (!Program.AsService)
 			{
-				Console.WriteLine("~~~~~~~~~~~~~~~~~~~~>");
 				Console.WriteLine(msg);
 				if (ex != null)
 					Console.WriteLine("-----------------------\r\n" + "==> [" + ex.GetType().GetTypeName(true) + "]: " + ex.Message + "\r\n" + ex.StackTrace + "\r\n-----------------------");
+				else
+					Console.WriteLine("~~~~~~~~~~~~~~~~~~~~>");
 			}
 		}
 
@@ -98,14 +99,8 @@ namespace net.vieapps.Services.Books
 				try
 				{
 					await this.StartAsync(
-						() =>
-						{
-							this.WriteInfo(correlationID, "The service is registered - PID: " + Process.GetCurrentProcess().Id.ToString());
-						},
-						(ex) =>
-						{
-							this.WriteInfo(correlationID, "Error occurred while registering the service", ex);
-						}
+						service => this.WriteInfo(correlationID, "The service is registered - PID: " + Process.GetCurrentProcess().Id.ToString()),
+						exception => this.WriteInfo(correlationID, "Error occurred while registering the service", exception)
 					);
 				}
 				catch (Exception ex)
@@ -263,7 +258,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!this.IsAuthorized(requestInfo, Components.Security.Action.View, null, (user, privileges) => this.GetPrivileges(requestInfo, user, privileges), (role) => this.GetActions(requestInfo, role)))
+			if (!await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, (user, privileges) => this.GetPrivileges(requestInfo, user, privileges), (role) => this.GetActions(requestInfo, role)))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -623,7 +618,7 @@ namespace net.vieapps.Services.Books
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
 			if (!gotRights)
-				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.View);
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
@@ -643,7 +638,7 @@ namespace net.vieapps.Services.Books
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
 			if (!gotRights)
-				gotRights = this.IsAuthorized(requestInfo, Components.Security.Action.Update);
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
