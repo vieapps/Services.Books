@@ -50,7 +50,7 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Properties
-		[Property(MaxLength = 250), Sortable, Searchable]
+		[Property(MaxLength = 250), NotEmpty, Sortable, Searchable]
 		public override string Title { get; set; }
 
 		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable]
@@ -59,7 +59,7 @@ namespace net.vieapps.Services.Books
 		[Property(MaxLength = 250), Searchable]
 		public string Translator { get; set; }
 
-		[Property(MaxLength = 250), Sortable(IndexName = "Info")]
+		[Property(MaxLength = 250), NotEmpty, Sortable(IndexName = "Info")]
 		public string Category { get; set; }
 
 		[Property(MaxLength = 250), Searchable]

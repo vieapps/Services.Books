@@ -94,10 +94,10 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Properties
-		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable]
+		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable(IndexName = "Statistics")]
 		public Level Level { get; set; }
 
-		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable]
+		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable(IndexName = "Statistics")]
 		public Reputation Reputation { get; set; }
 
 		[Sortable(IndexName = "Statistics")]
@@ -112,6 +112,7 @@ namespace net.vieapps.Services.Books
 		[Sortable(IndexName = "Statistics")]
 		public int TotalContributions { get; set; }
 
+		[Sortable(IndexName = "Statistics")]
 		public DateTime LastSync { get; set; }
 
 		[JsonIgnore, AsJson]

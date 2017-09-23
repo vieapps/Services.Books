@@ -178,7 +178,7 @@ namespace net.vieapps.Services.Books
 			var workingPrivileges = new List<Privilege>();
 
 			var objects = "book,category,statistic".ToList();
-			objects.ForEach(o => workingPrivileges.Add(new Privilege(this.ServiceName, o, PrivilegeRole.Viewer.ToString())));
+			objects.ForEach(o => workingPrivileges.Add(new Privilege(this.ServiceName, o, null, PrivilegeRole.Viewer.ToString())));
 
 			return workingPrivileges;
 		}
@@ -258,7 +258,10 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, (user, privileges) => this.GetPrivileges(requestInfo, user, privileges), (role) => this.GetActions(requestInfo, role)))
+			if (!await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null,
+					(user, privileges) => this.GetPrivileges(requestInfo, user, privileges),
+					role => this.GetActions(requestInfo, role))
+				)
 				throw new AccessDeniedException();
 
 			// prepare
@@ -624,9 +627,23 @@ namespace net.vieapps.Services.Books
 
 			// get information
 			var account = await Account.GetAsync<Account>(id, cancellationToken);
-			if (account == null)
-				throw new InformationNotFoundException();
 
+			// special: not found
+			if (account == null)
+			{
+				if (id.Equals(requestInfo.Session.User.ID))
+				{
+					account = new Account()
+					{
+						ID = id
+					};
+					await Account.CreateAsync(account);
+				}
+				else
+					throw new InformationNotFoundException();
+			}
+
+			// return JSON
 			return account.ToJson();
 		}
 		#endregion
