@@ -172,70 +172,13 @@ namespace net.vieapps.Services.Books
 			} 
 		}
 
-		#region Get privileges/actions (base on role)
-		List<Privilege> GetPrivileges(RequestInfo requestInfo, User user, Privileges privileges)
+		protected override List<Privilege> GetPrivileges(User user, Privileges privileges)
 		{
-			var workingPrivileges = new List<Privilege>();
-
-			var objects = "book,category,statistic".ToList();
-			objects.ForEach(o => workingPrivileges.Add(new Privilege(this.ServiceName, o, null, PrivilegeRole.Viewer.ToString())));
-
-			return workingPrivileges;
+			var role = this.GetPrivilegeRole(user);
+			return "book,category,statistic,profile".ToList()
+				.Select(o => new Privilege(this.ServiceName, o, null, role))
+				.ToList();
 		}
-
-		List<string> GetActions(RequestInfo requestInfo, PrivilegeRole role)
-		{
-			var actions = new List<Components.Security.Action>();
-			switch (role)
-			{
-				case PrivilegeRole.Administrator:
-					actions = new List<Components.Security.Action>()
-					{
-						Components.Security.Action.Full
-					};
-					break;
-
-				case PrivilegeRole.Moderator:
-					actions = new List<Components.Security.Action>()
-					{
-						Components.Security.Action.Approve,
-						Components.Security.Action.Update,
-						Components.Security.Action.Create,
-						Components.Security.Action.View,
-						Components.Security.Action.Download
-					};
-					break;
-
-				case PrivilegeRole.Editor:
-					actions = new List<Components.Security.Action>()
-					{
-						Components.Security.Action.Update,
-						Components.Security.Action.Create,
-						Components.Security.Action.View,
-						Components.Security.Action.Download
-					};
-					break;
-
-				case PrivilegeRole.Contributor:
-					actions = new List<Components.Security.Action>()
-					{
-						Components.Security.Action.Create,
-						Components.Security.Action.View,
-						Components.Security.Action.Download
-					};
-					break;
-
-				default:
-					actions = new List<Components.Security.Action>()
-					{
-						Components.Security.Action.View,
-						Components.Security.Action.Download
-					};
-					break;
-			}
-			return actions.Select(a => a.ToString()).ToList();
-		}
-		#endregion
 
 		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
@@ -258,9 +201,10 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null,
-					(user, privileges) => this.GetPrivileges(requestInfo, user, privileges),
-					role => this.GetActions(requestInfo, role))
+			if (!await this.IsAuthorizedAsync(
+					requestInfo, Components.Security.Action.View, null,
+					(user, privileges) => this.GetPrivileges(user, privileges),
+					(role) => this.GetPrivilegeActions(role))
 				)
 				throw new AccessDeniedException();
 
@@ -339,7 +283,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				Utility.Cache.SetAbsolute(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
+				await Utility.Cache.SetAbsoluteAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
 			}
 
 			// return the result
@@ -619,9 +563,11 @@ namespace net.vieapps.Services.Books
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
-			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
+			var gotRights = this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id);
 			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View);
+				gotRights = await this.IsSystemAdministratorAsync(requestInfo);
+			if (!gotRights)
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, this.GetPrivileges, this.GetPrivilegeActions);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
@@ -653,9 +599,11 @@ namespace net.vieapps.Services.Books
 		{
 			// check permissions
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
-			var gotRights = (this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id)) || await this.IsSystemAdministratorAsync(requestInfo);
+			var gotRights = this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id);
 			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update);
+				gotRights = await this.IsSystemAdministratorAsync(requestInfo);
+			if (!gotRights)
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update, null, this.GetPrivileges, this.GetPrivilegeActions);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
