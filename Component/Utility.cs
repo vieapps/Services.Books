@@ -447,8 +447,8 @@ namespace net.vieapps.Services.Books
 		internal static void CopyData(this Book book, JObject json)
 		{
 			book.PermanentID = (json["PermanentID"] as JValue).Value as string;
-			book.SourceUrl = json["SourceUrl"] != null
-				? (json["SourceUrl"] as JValue).Value as string
+			book.SourceUrl = json["SourceUri"] != null
+				? (json["SourceUri"] as JValue).Value as string
 				: "";
 
 			book.TOCs = new List<string>();

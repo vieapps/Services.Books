@@ -339,11 +339,16 @@ namespace net.vieapps.Services.Books
 				if (bookJSON == null)
 				{
 					bookJSON = book.Clone();
-					var jsonFilePath = bookJSON.GetFolderPath() + @"\" + bookJSON.Name + ".json";
+					var jsonFilePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".json";
 					if (File.Exists(jsonFilePath))
 					{
 						bookJSON.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
 						await Utility.Cache.SetAsFragmentsAsync(keyJSON, bookJSON);
+						if (book.SourceUrl != bookJSON.SourceUrl)
+						{
+							book.SourceUrl = bookJSON.SourceUrl;
+							await Book.UpdateAsync(book);
+						}
 					}
 				}
 			}
@@ -387,7 +392,7 @@ namespace net.vieapps.Services.Books
 
 			// generate files
 			else if ("files".IsEquals(objectIdentity))
-				return this.GenerateFiles(bookJSON);
+				return this.GenerateFiles(book);
 
 			// book information
 			else
