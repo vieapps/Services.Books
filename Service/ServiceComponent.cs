@@ -137,7 +137,7 @@ namespace net.vieapps.Services.Books
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
 #if DEBUG
-			this.WriteInfo(requestInfo.CorrelationID, "Process the request\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), null, false);
+			this.WriteInfo(requestInfo.CorrelationID, "Process the request" + "\r\n" + "Request ==>" + "\r\n" + requestInfo.ToJson().ToString(Formatting.Indented));
 #endif
 			try
 			{
@@ -167,7 +167,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				this.WriteInfo(requestInfo.CorrelationID, "Error occurred while processing\r\n==> Request:\r\n" + requestInfo.ToJson().ToString(Formatting.Indented), ex);
+				this.WriteInfo(requestInfo.CorrelationID, "Error occurred while processing: " + ex.Message + " [" + ex.GetType().ToString() + "]", ex);
 				throw this.GetRuntimeException(requestInfo, ex);
 			} 
 		}
@@ -693,10 +693,19 @@ namespace net.vieapps.Services.Books
 
 		async Task GenerateFilesAsync(Book book)
 		{
-			// generate files
+			// prepare
 			var filePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name);
+			var flag = "Files-" + filePath.ToLower().GetMD5();
+			if (await Utility.Cache.ExistsAsync(flag))
+				return;
+
+			// generate files
 			if (!File.Exists(filePath + ".epub") || !File.Exists(filePath + ".mobi"))
 			{
+				// update flag
+				await Utility.Cache.SetAsync(flag, book.ID);
+
+				// prepare
 				var correlationID = UtilityService.NewUID;
 				var status = new Dictionary<string, bool>()
 				{
@@ -730,9 +739,12 @@ namespace net.vieapps.Services.Books
 						}
 					);
 
-				// wait for completed
+				// wait for all tasks are completed
 				while (!status["epub"] || !status["mobi"])
 					await Task.Delay(789);
+
+				// update flag
+				await Utility.Cache.RemoveAsync(flag);
 			}
 
 			// send the update message

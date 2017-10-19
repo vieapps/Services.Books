@@ -330,11 +330,11 @@ namespace net.vieapps.Services.Books
 			var fileSize = fileInfo.Length.CastAs<double>();
 			var size = fileSize / (1024 * 1024);
 			if (size >= 1.0d)
-				return size.ToString("##0.##") + " MBytes";
+				return size.ToString("##0.##") + " M";
 			else
 			{
 				size = fileSize / 1024;
-				return size.ToString("##0.##") + " " + (size >= 1.0d ? "K" : "") + "Bytes";
+				return size.ToString("##0.##") + " " + (size >= 1.0d ? "K" : "B");
 			}
 		}
 
