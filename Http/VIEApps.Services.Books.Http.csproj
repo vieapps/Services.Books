@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>net.vieapps.Services.Books</RootNamespace>
     <AssemblyName>VIEApps.Services.Books.Http</AssemblyName>
-    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -51,6 +51,10 @@
     <ProjectReference Include="..\..\..\Components\Security\VIEApps.Components.Security.csproj">
       <Project>{bf8597e1-3fdf-4d5e-b990-6f8bcd8bbc70}</Project>
       <Name>VIEApps.Components.Security</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Components\Utility.AspNet\VIEApps.Components.Utility.AspNet.csproj">
+      <Project>{06470e83-b352-4a08-ac12-7c7ca607f36b}</Project>
+      <Name>VIEApps.Components.Utility.AspNet</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\..\Components\Utility\VIEApps.Components.Utility.csproj">
       <Project>{995c1122-0acc-4cf4-8a89-775212a35d89}</Project>
