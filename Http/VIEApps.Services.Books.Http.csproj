@@ -12,6 +12,7 @@
     <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -31,12 +32,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Newtonsoft.Json, Version=10.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\Newtonsoft.Json.10.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Web" />
   </ItemGroup>
   <ItemGroup>
@@ -44,22 +39,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Components\Caching\VIEApps.Components.Caching.csproj">
-      <Project>{98147bac-f0a1-48d8-9e1f-064dd227d281}</Project>
-      <Name>VIEApps.Components.Caching</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Components\Security\VIEApps.Components.Security.csproj">
-      <Project>{bf8597e1-3fdf-4d5e-b990-6f8bcd8bbc70}</Project>
-      <Name>VIEApps.Components.Security</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Components\Utility.AspNet\VIEApps.Components.Utility.AspNet.csproj">
-      <Project>{06470e83-b352-4a08-ac12-7c7ca607f36b}</Project>
-      <Name>VIEApps.Components.Utility.AspNet</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\Components\Utility\VIEApps.Components.Utility.csproj">
-      <Project>{995c1122-0acc-4cf4-8a89-775212a35d89}</Project>
-      <Name>VIEApps.Components.Utility</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\Base\VIEApps.Services.Base.csproj">
       <Project>{c496cef5-9ff8-4364-9860-fcdefed4e277}</Project>
       <Name>VIEApps.Services.Base</Name>
@@ -74,8 +53,12 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="app.config" />
-    <None Include="packages.config" />
+    <PackageReference Include="NETStandard.Library">
+      <Version>2.0.1</Version>
+    </PackageReference>
+    <PackageReference Include="VIEApps.Components.Utility.AspNet">
+      <Version>10.1.0.3</Version>
+    </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

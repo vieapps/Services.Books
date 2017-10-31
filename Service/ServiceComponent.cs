@@ -283,7 +283,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAbsoluteAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
+				await Utility.Cache.SetAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
 			}
 
 			// return the result
@@ -343,7 +343,7 @@ namespace net.vieapps.Services.Books
 					if (File.Exists(jsonFilePath))
 					{
 						bookJSON.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
-						await Utility.Cache.SetAsFragmentsAsync(keyJSON, bookJSON);
+						await Utility.Cache.SetFragmentsAsync(keyJSON, bookJSON);
 						if (book.SourceUrl != bookJSON.SourceUrl)
 						{
 							book.SourceUrl = bookJSON.SourceUrl;
