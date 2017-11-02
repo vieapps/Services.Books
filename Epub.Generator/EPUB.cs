@@ -27,10 +27,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
-using System.Diagnostics;
+using System.IO.Compression;
 using System.Xml.Linq;
-using Epub;
-using Ionic.Zip;
+
+//using Ionic.Zip;
 
 namespace Epub
 {
@@ -282,6 +282,7 @@ namespace Epub
 			WriteContainer();
 			WriteAppleIBooksDisplayOptions();
 
+			/*
 			using (ZipFile zip = new ZipFile())
 			{
 				zip.EmitTimesInWindowsFormatWhenSaving = false;
@@ -290,6 +291,9 @@ namespace Epub
 				zip.AddDirectory(GetTempDirectory());
 				zip.Save(epubFile);
 			}
+			*/
+
+			ZipFile.CreateFromDirectory(GetTempDirectory(), epubFile);
 		}
 
 		private string AddEntry(string path, string type)
