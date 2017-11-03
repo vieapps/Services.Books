@@ -260,23 +260,23 @@ namespace net.vieapps.Services.Books
 				throw new InformationNotFoundException();
 
 			// load from JSON file if has no chapter
-			Book bookJSON = null;
+			Book bookJson = null;
 			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
-				var keyJSON = id.GetCacheKey<Book>() + "-json";
-				bookJSON = await Utility.Cache.GetAsync<Book>(keyJSON);
-				if (bookJSON == null)
+				var keyJson = id.GetCacheKey<Book>() + "-json";
+				bookJson = await Utility.Cache.GetAsync<Book>(keyJson);
+				if (bookJson == null)
 				{
-					bookJSON = book.Clone();
+					bookJson = book.Clone();
 					var jsonFilePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".json";
 					if (File.Exists(jsonFilePath))
 					{
-						bookJSON.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
-						await Utility.Cache.SetFragmentsAsync(keyJSON, bookJSON);
-						if (book.SourceUrl != bookJSON.SourceUrl)
+						bookJson.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
+						await Utility.Cache.SetFragmentsAsync(keyJson, bookJson);
+						if (book.SourceUrl != bookJson.SourceUrl)
 						{
-							book.SourceUrl = bookJSON.SourceUrl;
-							await Book.UpdateAsync(book);
+							book.SourceUrl = bookJson.SourceUrl;
+							await Book.UpdateAsync(book, cancellationToken);
 						}
 					}
 				}
@@ -315,7 +315,7 @@ namespace net.vieapps.Services.Books
 				{
 					{ "ID", book.ID },
 					{ "Chapter", chapter },
-					{ "Content", bookJSON.Chapters.Count > 0 ? bookJSON.Chapters[chapter - 1].NormalizeMediaFileUris(book) : "" }
+					{ "Content", bookJson.Chapters.Count > 0 ? bookJson.Chapters[chapter - 1].NormalizeMediaFileUris(book) : "" }
 				};
 			}
 
@@ -330,9 +330,9 @@ namespace net.vieapps.Services.Books
 				var json = book.ToJson();
 
 				// update
-				json["TOCs"] = bookJSON.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
+				json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
 				if (book.TotalChapters < 2)
-					json.Add(new JProperty("Body", bookJSON.Chapters.Count > 0 ? bookJSON.Chapters[0].NormalizeMediaFileUris(book) : ""));
+					json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? bookJson.Chapters[0].NormalizeMediaFileUris(book) : ""));
 
 				// return
 				return json;
@@ -1125,9 +1125,7 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID);
-			if (account == null)
-				throw new InformationNotFoundException();
+			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID) ?? throw new InformationNotFoundException();
 
 			switch (requestInfo.Verb)
 			{
