@@ -23,13 +23,13 @@ namespace net.vieapps.Services.Books
 			{
 				case "GET":
 					if (context.Request.RawUrl.IsStartsWith("/books/download/"))
-						await this.DownloadBookFileAsync(context, cancellationToken);
+						await this.DownloadBookFileAsync(context, cancellationToken).ConfigureAwait(false);
 					else
-						await this.ShowBookFileAsync(context, cancellationToken);
+						await this.ShowBookFileAsync(context, cancellationToken).ConfigureAwait(false);
 					break;
 
 				case "POST":
-					await this.ReceiveBookCoverAsync(context, cancellationToken);
+					await this.ReceiveBookCoverAsync(context, cancellationToken).ConfigureAwait(false);
 					break;
 
 				default:
@@ -100,7 +100,7 @@ namespace net.vieapps.Services.Books
 					: fileInfo.Name.IsEndsWith(".gif")
 						? "gif"
 						: "bmp";
-			await context.WriteFileToOutputAsync(fileInfo, "image/" + contentType, eTag, null, cancellationToken);
+			await context.WriteFileToOutputAsync(fileInfo, "image/" + contentType, eTag, null, cancellationToken).ConfigureAwait(false);
 		}
 
 		async Task DownloadBookFileAsync(HttpContext context, CancellationToken cancellationToken)
@@ -163,7 +163,7 @@ namespace net.vieapps.Services.Books
 					{ "BookID", requestInfo[3].Url64Decode() },
 				}
 			};
-			await this.SendInterCommunicateMessageAsync(message, cancellationToken);
+			await this.SendInterCommunicateMessageAsync(message, cancellationToken).ConfigureAwait(false);
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -182,12 +182,12 @@ namespace net.vieapps.Services.Books
 					: fileInfo.Name.IsEndsWith(".json")
 						?"json"
 						: "octet-stream";
-			await context.WriteFileToOutputAsync(fileInfo, "application/" + contentType, eTag, UtilityService.GetNormalizedFilename(name) + ext, cancellationToken);
+			await context.WriteFileToOutputAsync(fileInfo, "application/" + contentType, eTag, UtilityService.GetNormalizedFilename(name) + ext, cancellationToken).ConfigureAwait(false);
 		}
 
-		async Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)
+		Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)
 		{
-			await Task.Delay(0);
+			throw new NotImplementedException();
 		}
 
 	}

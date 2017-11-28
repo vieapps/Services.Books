@@ -21,7 +21,7 @@ namespace net.vieapps.Services.Books
 {
 	public class ServiceComponent : ServiceBase
 	{
-		public ServiceComponent() { }
+		public ServiceComponent() : base() { }
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, System.Action nextAction = null, Func<Task> nextActionAsync = null)
@@ -73,19 +73,19 @@ namespace net.vieapps.Services.Books
 				switch (requestInfo.ObjectName.ToLower())
 				{
 					case "book":
-						return await this.ProcessBookAsync(requestInfo, cancellationToken);
+						return await this.ProcessBookAsync(requestInfo, cancellationToken).ConfigureAwait(false);
 
 					case "statistic":
-						return await this.ProcessStatisticAsync(requestInfo, cancellationToken);
+						return await this.ProcessStatisticAsync(requestInfo, cancellationToken).ConfigureAwait(false);
 
 					case "profile":
-						return await this.ProcessProfileAsync(requestInfo, cancellationToken);
+						return await this.ProcessProfileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
 
 					case "file":
-						return await this.ProcessFileAsync(requestInfo, cancellationToken);
+						return await this.ProcessFileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
 
 					case "bookmarks":
-						return await this.ProcessBookmarksAsync(requestInfo, cancellationToken);
+						return await this.ProcessBookmarksAsync(requestInfo, cancellationToken).ConfigureAwait(false);
 				}
 
 				// unknown
@@ -133,7 +133,7 @@ namespace net.vieapps.Services.Books
 			if (!await this.IsAuthorizedAsync(
 					requestInfo, Components.Security.Action.View, null,
 					(user, privileges) => this.GetPrivileges(user, privileges),
-					(role) => this.GetPrivilegeActions(role))
+					(role) => this.GetPrivilegeActions(role)).ConfigureAwait(false)
 				)
 				throw new AccessDeniedException();
 
@@ -164,7 +164,7 @@ namespace net.vieapps.Services.Books
 				: "";
 
 			var json = !cacheKey.Equals("")
-				? await Utility.Cache.GetAsync<string>(cacheKey + ":" + pageNumber.ToString() + "-json")
+				? await Utility.Cache.GetAsync<string>(cacheKey + ":" + pageNumber.ToString() + "-json").ConfigureAwait(false)
 				: "";
 
 			if (!string.IsNullOrWhiteSpace(json))
@@ -177,8 +177,8 @@ namespace net.vieapps.Services.Books
 
 			if (totalRecords < 0)
 				totalRecords = string.IsNullOrWhiteSpace(query)
-					? await Book.CountAsync(filter, cacheKey + "-total", cancellationToken)
-					: await Book.CountByQueryAsync(query, filter, cancellationToken);
+					? await Book.CountAsync(filter, cacheKey + "-total", cancellationToken).ConfigureAwait(false)
+					: await Book.CountByQueryAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
 			var pageSize = pagination.Item3;
 
@@ -189,8 +189,8 @@ namespace net.vieapps.Services.Books
 			// search
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
-					? await Book.FindAsync(filter, sort, pageSize, pageNumber, cacheKey + ":" + pageNumber.ToString(), cancellationToken)
-					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken)
+					? await Book.FindAsync(filter, sort, pageSize, pageNumber, cacheKey + ":" + pageNumber.ToString(), cancellationToken).ConfigureAwait(false)
+					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
 				: new List<Book>();
 
 			// build result
@@ -212,7 +212,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheTime / 2);
+				await Utility.Cache.SetAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
 			}
 
 			// return the result
@@ -226,7 +226,7 @@ namespace net.vieapps.Services.Books
 			// check permission on convert
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
-				if (!await this.IsSystemAdministratorAsync(requestInfo))
+				if (!await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false))
 					throw new AccessDeniedException();
 			}
 
@@ -238,7 +238,7 @@ namespace net.vieapps.Services.Books
 
 			// create new
 			var book = requestInfo.GetBodyJson().Copy<Book>();
-			await Book.CreateAsync(book, cancellationToken);
+			await Book.CreateAsync(book, cancellationToken).ConfigureAwait(false);
 			return book.ToJson();
 		}
 		#endregion
@@ -255,7 +255,7 @@ namespace net.vieapps.Services.Books
 					? requestInfo.Query["id"]
 					: null;
 
-			var book = await Book.GetAsync<Book>(id, cancellationToken);
+			var book = await Book.GetAsync<Book>(id, cancellationToken).ConfigureAwait(false);
 			if (book == null)
 				throw new InformationNotFoundException();
 
@@ -264,7 +264,7 @@ namespace net.vieapps.Services.Books
 			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
 				var keyJson = id.GetCacheKey<Book>() + "-json";
-				bookJson = await Utility.Cache.GetAsync<Book>(keyJson);
+				bookJson = await Utility.Cache.GetAsync<Book>(keyJson).ConfigureAwait(false);
 				if (bookJson == null)
 				{
 					bookJson = book.Clone();
@@ -272,7 +272,7 @@ namespace net.vieapps.Services.Books
 					if (File.Exists(jsonFilePath))
 					{
 						bookJson.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
-						await Utility.Cache.SetFragmentsAsync(keyJson, bookJson);
+						await Utility.Cache.SetAsFragmentsAsync(keyJson, bookJson).ConfigureAwait(false);
 						if (book.SourceUrl != bookJson.SourceUrl)
 						{
 							book.SourceUrl = bookJson.SourceUrl;
@@ -286,7 +286,7 @@ namespace net.vieapps.Services.Books
 			if ("counters".IsEquals(objectIdentity))
 			{
 				// update counters
-				var result = await this.UpdateCounterAsync(book, requestInfo.Query["action"] ?? "View", cancellationToken);
+				var result = await this.UpdateCounterAsync(book, requestInfo.Query["action"] ?? "View", cancellationToken).ConfigureAwait(false);
 
 				// send update message
 				await this.SendUpdateMessageAsync(new UpdateMessage()
@@ -295,7 +295,7 @@ namespace net.vieapps.Services.Books
 					ExcludedDeviceID = requestInfo.Session.DeviceID,
 					Type = "Books#Book#Counters",
 					Data = result
-				}, cancellationToken);
+				}, cancellationToken).ConfigureAwait(false);
 
 				// return update
 				return result;
@@ -349,7 +349,7 @@ namespace net.vieapps.Services.Books
 				counter.Week = counter.LastUpdated.IsInCurrentWeek() ? counter.Week + 1 : 1;
 				counter.Month = counter.LastUpdated.IsInCurrentMonth() ? counter.Month + 1 : 1;
 				counter.LastUpdated = DateTime.Now;
-				await Book.UpdateAsync(book, cancellationToken);
+				await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 			}
 
 			// return data
@@ -404,7 +404,7 @@ namespace net.vieapps.Services.Books
 					});
 				});
 
-				await this.SendUpdateMessagesAsync(messages, requestInfo.Session.DeviceID, null, cancellationToken);
+				await this.SendUpdateMessagesAsync(messages, requestInfo.Session.DeviceID, null, cancellationToken).ConfigureAwait(false);
 
 				return new JObject();
 			}
@@ -464,7 +464,7 @@ namespace net.vieapps.Services.Books
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 
 			// check permission
-			var isSystemAdministrator = await this.IsSystemAdministratorAsync(requestInfo);
+			var isSystemAdministrator = await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false);
 			if (requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 			{
 				if (!isSystemAdministrator)
@@ -487,7 +487,7 @@ namespace net.vieapps.Services.Books
 				account.ID = id;
 
 			// update database
-			await Account.CreateAsync(account, cancellationToken);
+			await Account.CreateAsync(account, cancellationToken).ConfigureAwait(false);
 			return account.ToJson();
 		}
 		#endregion
@@ -499,14 +499,14 @@ namespace net.vieapps.Services.Books
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id);
 			if (!gotRights)
-				gotRights = await this.IsSystemAdministratorAsync(requestInfo);
+				gotRights = await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false);
 			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, this.GetPrivileges, this.GetPrivilegeActions);
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, this.GetPrivileges, this.GetPrivilegeActions).ConfigureAwait(false);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
 			// get information
-			var account = await Account.GetAsync<Account>(id, cancellationToken);
+			var account = await Account.GetAsync<Account>(id, cancellationToken).ConfigureAwait(false);
 
 			// special: not found
 			if (account == null)
@@ -517,7 +517,7 @@ namespace net.vieapps.Services.Books
 					{
 						ID = id
 					};
-					await Account.CreateAsync(account);
+					await Account.CreateAsync(account).ConfigureAwait(false);
 				}
 				else
 					throw new InformationNotFoundException();
@@ -535,14 +535,14 @@ namespace net.vieapps.Services.Books
 			var id = requestInfo.GetObjectIdentity() ?? requestInfo.Session.User.ID;
 			var gotRights = this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id);
 			if (!gotRights)
-				gotRights = await this.IsSystemAdministratorAsync(requestInfo);
+				gotRights = await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false);
 			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update, null, this.GetPrivileges, this.GetPrivilegeActions);
+				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update, null, this.GetPrivileges, this.GetPrivilegeActions).ConfigureAwait(false);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
 			// get existing information
-			var account = await Account.GetAsync<Account>(id, cancellationToken);
+			var account = await Account.GetAsync<Account>(id, cancellationToken).ConfigureAwait(false);
 			if (account == null)
 				throw new InformationNotFoundException();
 
@@ -550,7 +550,7 @@ namespace net.vieapps.Services.Books
 			account.CopyFrom(requestInfo.GetBodyJson());
 			account.ID = id;
 
-			await Account.UpdateAsync(account, cancellationToken);
+			await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
 			return account.ToJson();
 		}
 		#endregion
@@ -568,7 +568,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> CopyFilesAsync(RequestInfo requestInfo)
 		{
 			// prepare
-			if (!await this.IsSystemAdministratorAsync(requestInfo))
+			if (!await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			var name = requestInfo.Extra != null && requestInfo.Extra.ContainsKey("Name")
@@ -592,8 +592,11 @@ namespace net.vieapps.Services.Books
 				File.Copy(source + filename, destination + filename, true);
 
 				var permanentID = Utility.GetDataFromJsonFile(source + filename, "PermanentID");
-				UtilityService.GetFiles(source + Utility.MediaFolder, permanentID + "-*.*")
-					.ForEach(file => File.Copy(file.FullName, destination + Utility.MediaFolder + @"\" + file.Name, true));
+				await UtilityService.ExecuteTask(() =>
+				{
+					UtilityService.GetFiles(source + Utility.MediaFolder, permanentID + "-*.*")
+						.ForEach(file => File.Copy(file.FullName, destination + Utility.MediaFolder + @"\" + file.Name, true));
+				}).ConfigureAwait(false);
 			}
 
 			return new JObject()
@@ -625,14 +628,14 @@ namespace net.vieapps.Services.Books
 			// prepare
 			var filePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name);
 			var flag = "Files-" + filePath.ToLower().GetMD5();
-			if (await Utility.Cache.ExistsAsync(flag))
+			if (await Utility.Cache.ExistsAsync(flag).ConfigureAwait(false))
 				return;
 
 			// generate files
 			if (!File.Exists(filePath + ".epub") || !File.Exists(filePath + ".mobi"))
 			{
 				// update flag
-				await Utility.Cache.SetAsync(flag, book.ID);
+				await Utility.Cache.SetAsync(flag, book.ID).ConfigureAwait(false);
 
 				// prepare
 				var correlationID = UtilityService.NewUID;
@@ -670,10 +673,10 @@ namespace net.vieapps.Services.Books
 
 				// wait for all tasks are completed
 				while (!status["epub"] || !status["mobi"])
-					await Task.Delay(789);
+					await Task.Delay(789).ConfigureAwait(false);
 
 				// update flag
-				await Utility.Cache.RemoveAsync(flag);
+				await Utility.Cache.RemoveAsync(flag).ConfigureAwait(false);
 			}
 
 			// send the update message
@@ -686,7 +689,7 @@ namespace net.vieapps.Services.Books
 					{ "ID", book.ID },
 					{ "Files", book.GetFiles() }
 				}				
-			});
+			}).ConfigureAwait(false);
 		}
 
 		public string CreditsInApp
@@ -1125,7 +1128,7 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID) ?? throw new InformationNotFoundException();
+			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 
 			switch (requestInfo.Verb)
 			{
@@ -1150,7 +1153,7 @@ namespace net.vieapps.Services.Books
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
-					await Account.UpdateAsync(account, cancellationToken);
+					await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
 
 					return new JObject()
 					{
@@ -1168,7 +1171,7 @@ namespace net.vieapps.Services.Books
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
-					await Account.UpdateAsync(account, cancellationToken);
+					await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
 
 					var data = new JObject()
 					{
@@ -1178,15 +1181,15 @@ namespace net.vieapps.Services.Books
 					};
 
 					var sessions = await this.GetSessionsAsync(requestInfo);
-					await sessions.Where(s => s.Item4).ForEachAsync(async (session, ctoken) =>
+					await sessions.Where(s => s.Item4).ForEachAsync(async (session, token) =>
 					{
 						await this.SendUpdateMessageAsync(new UpdateMessage()
 						{
 							Type = "Books#Bookmarks",
 							DeviceID = session.Item2,
 							Data = data
-						}, ctoken);
-					}, cancellationToken);
+						}, token).ConfigureAwait(false);
+					}, cancellationToken).ConfigureAwait(false);
 
 					return data;
 			}
