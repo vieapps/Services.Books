@@ -613,7 +613,7 @@ namespace net.vieapps.Services.Books
 			if (book != null)
 				Task.Run(async () =>
 				{
-					await this.GenerateFilesAsync(book);
+					await this.GenerateFilesAsync(book).ConfigureAwait(false);
 				}).ConfigureAwait(false);
 
 			// return status
@@ -728,7 +728,7 @@ namespace net.vieapps.Services.Books
 				var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
 
 				// meta data
-				Epub.Document epub = new Epub.Document();
+				var epub = new Epub.Document();
 				epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
 				epub.AddLanguage(book.Language);
 				epub.AddTitle(book.Title);
@@ -806,7 +806,7 @@ namespace net.vieapps.Services.Books
 				// cover image
 				if (!string.IsNullOrWhiteSpace(book.Cover))
 				{
-					byte[] coverData = UtilityService.ReadFile(book.Cover.NormalizeMediaFilePaths(book));
+					byte[] coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
 					if (coverData != null && coverData.Length > 0)
 					{
 						string coverId = epub.AddImageData("cover.jpg", coverData);
@@ -871,7 +871,7 @@ namespace net.vieapps.Services.Books
 						end = content.IndexOf(@char.ToString(), start + 1, StringComparison.OrdinalIgnoreCase);
 
 						string image = content.Substring(start, end - start);
-						byte[] imageData = UtilityService.ReadFile(image.NormalizeMediaFilePaths(book));
+						byte[] imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
 						if (imageData != null && imageData.Length > 0)
 							epub.AddImageData(image, imageData);
 
@@ -1180,7 +1180,7 @@ namespace net.vieapps.Services.Books
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
-					var sessions = await this.GetSessionsAsync(requestInfo);
+					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
 					await sessions.Where(s => s.Item4).ForEachAsync(async (session, token) =>
 					{
 						await this.SendUpdateMessageAsync(new UpdateMessage()
