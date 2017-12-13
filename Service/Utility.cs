@@ -30,7 +30,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch
 					{
-						Utility._CacheExpirationTime = 0;
+						Utility._CacheExpirationTime = 30;
 					}
 				return Utility._CacheExpirationTime;
 			}
@@ -446,7 +446,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Working with JSON of books
+		#region Copy data from JSON file into book
 		internal static void CopyData(this Book book, JObject json)
 		{
 			book.PermanentID = (json["PermanentID"] as JValue).Value as string;

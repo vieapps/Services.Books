@@ -21,7 +21,29 @@ namespace net.vieapps.Services.Books
 {
 	public class ServiceComponent : ServiceBase
 	{
-		public ServiceComponent() : base() { }
+
+		#region Constructor & Destructor
+		public ServiceComponent() : base()
+		{
+		}
+
+		public override void Dispose()
+		{
+			try
+			{
+				this._cancellationTokenSource?.Cancel();
+			}
+			catch { }
+			this._cancellationTokenSource?.Dispose();
+			this._timers.ForEach(timer => timer.Stop());
+			base.Dispose();
+		}
+
+		~ServiceComponent()
+		{
+			this.Dispose();
+		}
+		#endregion
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, System.Action nextAction = null, Func<Task> nextActionAsync = null)
@@ -66,7 +88,9 @@ namespace net.vieapps.Services.Books
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
 #if DEBUG
-			this.WriteLog(requestInfo.CorrelationID, "Process the request" + "\r\n" + "Request ==>" + "\r\n" + requestInfo.ToJson().ToString(Formatting.Indented));
+			var stopwatch = new Stopwatch();
+			stopwatch.Start();
+			await this.WriteLogAsync(requestInfo.CorrelationID, $"Process the request\r\n{requestInfo.ToJson().ToString(Formatting.Indented)}").ConfigureAwait(false);
 #endif
 			try
 			{
@@ -96,9 +120,16 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				this.WriteLog(requestInfo.CorrelationID, "Error occurred while processing: " + ex.Message + " [" + ex.GetType().ToString() + "]", ex);
+				await this.WriteLogAsync(requestInfo.CorrelationID, "Error occurred while processing", ex).ConfigureAwait(false);
 				throw this.GetRuntimeException(requestInfo, ex);
-			} 
+			}
+#if DEBUG
+			finally
+			{
+				stopwatch.Stop();
+				await this.WriteLogAsync(requestInfo.CorrelationID, $"The request is completed in: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
+			}
+#endif
 		}
 
 		protected override List<Privilege> GetPrivileges(User user, Privileges privileges)
@@ -271,12 +302,12 @@ namespace net.vieapps.Services.Books
 					var jsonFilePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".json";
 					if (File.Exists(jsonFilePath))
 					{
-						bookJson.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8)));
+						bookJson.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8).ConfigureAwait(false)));
 						await Utility.Cache.SetAsFragmentsAsync(keyJson, bookJson).ConfigureAwait(false);
 						if (book.SourceUrl != bookJson.SourceUrl)
 						{
 							book.SourceUrl = bookJson.SourceUrl;
-							await Book.UpdateAsync(book, cancellationToken);
+							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 						}
 					}
 				}
@@ -1240,6 +1271,9 @@ namespace net.vieapps.Services.Books
 
 		#region Timers for working with background workers & schedulers
 		internal List<System.Timers.Timer> _timers = new List<System.Timers.Timer>();
+		CancellationTokenSource _cancellationTokenSource = null;
+		Crawler _crawler = new Crawler();
+		bool _isCrawlerRunning = false;
 
 		void StartTimer(int interval, Action<object, System.Timers.ElapsedEventArgs> action, bool autoReset = true)
 		{
@@ -1273,7 +1307,46 @@ namespace net.vieapps.Services.Books
 			});
 
 			// scan new e-books from iSach.info & VnThuQuan.net
+			this._cancellationTokenSource = new CancellationTokenSource();
+			this.StartTimer(8 * 60 * 60, (sender, args) =>
+			{
+				if (!this._isCrawlerRunning)
+					this.RunCrawler();
+			});
 
+			// run the crawler at start-up time
+			if ("true".IsEquals(UtilityService.GetAppSetting("BookRunCrawlerAtStartup", "true")))
+				this.RunCrawler();
+		}
+
+		void RunCrawler()
+		{
+			var correlationID = UtilityService.NewUID;
+			this.WriteLog(correlationID, "Start the crawler");
+			this._isCrawlerRunning = true;
+			this._crawler.Start(
+				(book) =>
+				{
+				},
+				(crawler, times) =>
+				{
+					this.WriteLog(correlationID, 
+						$"The process of crawler is done - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
+						"--------------------------------------------------------------" + "\r\n" +
+						string.Join("\r\n", crawler.Logs) + "\r\n"
+						+ "--------------------------------------------------------------"
+					);
+					this._isCrawlerRunning = false;
+					this._crawler.Logs.Clear();
+				},
+				(crawler, ex) =>
+				{
+					this.WriteLog(correlationID, "Error occurred while crawling", ex);
+					this._isCrawlerRunning = false;
+					this._crawler.Logs.Clear();
+				},
+				this._cancellationTokenSource.Token
+			);
 		}
 		#endregion
 

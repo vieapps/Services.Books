@@ -1,0 +1,192 @@
+﻿#region Related components
+using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Diagnostics;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using net.vieapps.Components.Utility;
+#endregion
+
+namespace net.vieapps.Services.Books.Parsers.Bookselfs
+{
+	public class VnThuQuan : IBookselfParser
+	{
+
+		#region Properties
+		[JsonIgnore]
+		public string UrlPattern { get; set; } = "";
+		[JsonIgnore]
+		public List<string> UrlParameters { get; set; } = new List<string>();
+		public int TotalPages { get; set; } = 0;
+		public int CurrentPage { get; set; } = 1;
+		[JsonIgnore]
+		public List<IBookParser> Books { get; set; } = new List<IBookParser>();
+		public int CategoryIndex { get; set; } = 0;
+		[JsonIgnore]
+		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
+		#endregion
+
+		#region Initialize & Finalize
+		public IBookselfParser Initialize(string folder = null)
+		{
+			var filePath = (string.IsNullOrWhiteSpace(folder) ? Utility.FolderOfStatisticFiles : folder) + @"\vnthuquan.net.status.json";
+			var json = File.Exists(filePath)
+				? JObject.Parse(UtilityService.ReadTextFile(filePath))
+				: new JObject()
+				{
+					{ "TotalPages", 0 },
+					{ "CurrentPage", 0 },
+					{ "LastActivity", DateTime.Now },
+				};
+
+			this.TotalPages = (json["TotalPages"] as JValue).Value.CastAs<int>();
+			this.CurrentPage = (json["CurrentPage"] as JValue).Value.CastAs<int>();
+
+			if (this.TotalPages < 1)
+			{
+				this.CurrentPage = 0;
+				this.TotalPages = 0;
+				this.UrlPattern = "http://vnthuquan.net/mobil/?tranghientai={0}";
+			}
+			else if (this.CurrentPage >= this.TotalPages)
+				this.UrlPattern = null;
+
+			this.CurrentPage++;
+			this.UrlParameters.Add(this.CurrentPage.ToString());
+
+			return this;
+		}
+
+		public IBookselfParser FinaIize(string folder = null)
+		{
+			var json = JObject.FromObject(this);
+			json.Add(new JProperty("LastActivity", DateTime.Now));
+
+			var filePath = (string.IsNullOrWhiteSpace(folder) ? Utility.FolderOfStatisticFiles : folder) + @"\vnthuquan.net.status.json";
+			UtilityService.WriteTextFile(filePath, json.ToString(Formatting.Indented));
+
+			return this;
+		}
+		#endregion
+
+		#region Parse the bookself to get the listing
+		public async Task<IBookselfParser> ParseAsync(Action<IBookselfParser, long> onCompleted = null, Action<IBookselfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			// prepare
+			var stopwatch = new Stopwatch();
+			stopwatch.Start();
+
+			// get HTML
+			var url = this.UrlPattern;
+			this.UrlParameters?.ForEach((parameter, index) => url = url.Replace("{" + index + "}", parameter));
+
+			var html = "";
+			try
+			{
+				html = await UtilityService.GetWebPageAsync(url, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
+			}
+			catch (Exception ex)
+			{
+				onError?.Invoke(this, ex);
+				if (onError == null)
+					throw ex;
+			}
+
+			// parse
+			using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
+			{
+				this.Parse(html);
+			}
+
+			// callback when done
+			stopwatch.Stop();
+			onCompleted?.Invoke(this, stopwatch.ElapsedMilliseconds);
+			return this;
+		}
+
+		void Parse(string html)
+		{
+			// pages
+			int start = -1, end = -1;
+			if (this.TotalPages < 1)
+			{
+				start = html.PositionOf("id='paging'");
+				start = start < 0 ? -1 : html.PositionOf(">", start + 1) + 1;
+				end = start < 0 ? -1 : html.PositionOf("</div>", start + 1);
+				if (start > 0 && end > 0)
+				{
+					var info = html.Substring(start, end - start);
+					var data = "";
+					start = info.PositionOf("<a");
+					while (start > -1)
+					{
+						start = info.PositionOf("href='", start + 1) + 6;
+						end = info.PositionOf("'", start + 1);
+						data = info.Substring(start, end - start);
+						start = info.PositionOf("<a", start + 1);
+					}
+					data = data.Substring(data.PositionOf("=") + 1);
+					this.TotalPages = data.Equals("#")
+						? this.CurrentPage
+						: Convert.ToInt32(data);
+				}
+			}
+
+			// books
+			this.Books = new List<IBookParser>();
+
+			start = html.PositionOf("data-role=\"content\"");
+			start = start < 0 ? -1 : html.PositionOf("<ul", start + 1);
+			start = start < 0 ? -1 : html.PositionOf(">", start + 1) + 1;
+			end = start < 0 ? -1 : html.PositionOf("</ul>", start + 1);
+			html = start > 0 && end > 0 ? html.Substring(start, end - start) : "";
+
+			start = html.PositionOf("<li");
+			while (start > -1)
+			{
+				var book = new Parsers.Books.VnThuQuan();
+				book.Source = "vnthuquan.net";
+
+				start = html.PositionOf("<a", start + 1) + 1;
+				start = html.PositionOf("href='", start + 1) + 6;
+				end = html.PositionOf("'", start + 1);
+				book.SourceUrl = "http://vnthuquan.net/mobil/" + html.Substring(start, end - start).Trim();
+
+				start = html.PositionOf("<p", start + 1);
+				start = html.PositionOf(">", start + 1) + 1;
+				end = html.PositionOf("<", start + 1);
+				book.Category = html.Substring(start, end - start).Trim().GetCategory();
+
+				start = html.PositionOf("<h2>", start + 1) + 4;
+				end = html.PositionOf("</h2>", start + 1);
+				book.Title = html.Substring(start, end - start).GetNormalized();
+				if (book.Title.Equals(book.Title.ToUpper()))
+					book.Title = book.Title.ToLower().GetNormalized();
+
+				start = html.PositionOf("Tác giả:", start + 1) + 8;
+				end = html.PositionOf("<", start + 1);
+				var author = html.Substring(start, end - start).Trim();
+				"Đồng tác giả|Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Bản dịch|Hiệu đính|Biên Tập|Biên soạn|đánh máy bổ sung|Nguyên tác|Nguyên bản|Dịch theo|Dịch từ|Theo bản|Biên dịch|Tổng Hợp|Tủ Sách|Sách Xuất Bản Tại|Chủ biên|Chủ nhiệm".Split('|')
+					.ForEach(excluded =>
+					{
+						var pos = author.PositionOf(excluded);
+						if (pos > -1)
+							author = author.Remove(pos).GetNormalized();
+					});
+				book.Author = author.GetAuthor();
+
+				this.Books.Add(book);
+
+				start = html.PositionOf("<li", start + 1);
+			}
+		}
+		#endregion
+
+	}
+}
