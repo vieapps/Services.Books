@@ -27,18 +27,6 @@ namespace net.vieapps.Services.Books
 		{
 		}
 
-		public override void Dispose()
-		{
-			try
-			{
-				this._cancellationTokenSource?.Cancel();
-			}
-			catch { }
-			this._cancellationTokenSource?.Dispose();
-			this._timers.ForEach(timer => timer.Stop());
-			base.Dispose();
-		}
-
 		~ServiceComponent()
 		{
 			this.Dispose();
@@ -67,7 +55,7 @@ namespace net.vieapps.Services.Books
 				}
 
 			// register timers
-			this.RegisterTimers();
+			this.RegisterTimers(args);
 
 			// start the service
 			base.Start(args, initializeRepository, nextAction, nextActionAsync);
@@ -78,8 +66,8 @@ namespace net.vieapps.Services.Books
 			if (!Directory.Exists(path))
 				Directory.CreateDirectory(path);
 
-			if (mediaFolders && !Directory.Exists(path + @"\" + Utility.MediaFolder))
-				Directory.CreateDirectory(path + @"\" + Utility.MediaFolder);
+			if (mediaFolders && !Directory.Exists(path + @"\" + Definitions.MediaFolder))
+				Directory.CreateDirectory(path + @"\" + Definitions.MediaFolder);
 		}
 		#endregion
 
@@ -204,7 +192,7 @@ namespace net.vieapps.Services.Books
 			// prepare pagination
 			var totalRecords = pagination.Item1 > -1
 				? pagination.Item1
-				:  -1;
+				: -1;
 
 			if (totalRecords < 0)
 				totalRecords = string.IsNullOrWhiteSpace(query)
@@ -590,13 +578,13 @@ namespace net.vieapps.Services.Books
 		{
 			// convert file
 			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
-				return this.CopyFilesAsync(requestInfo);
+				return this.CopyFilesAsync(requestInfo, cancellationToken);
 
 			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
 		}
 
 		#region Copy files of a book
-		async Task<JObject> CopyFilesAsync(RequestInfo requestInfo)
+		async Task<JObject> CopyFilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// prepare
 			if (!await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false))
@@ -621,13 +609,9 @@ namespace net.vieapps.Services.Books
 			if (File.Exists(source + filename))
 			{
 				File.Copy(source + filename, destination + filename, true);
-
 				var permanentID = Utility.GetDataFromJsonFile(source + filename, "PermanentID");
-				await UtilityService.ExecuteTask(() =>
-				{
-					UtilityService.GetFiles(source + Utility.MediaFolder, permanentID + "-*.*")
-						.ForEach(file => File.Copy(file.FullName, destination + Utility.MediaFolder + @"\" + file.Name, true));
-				}).ConfigureAwait(false);
+				(await UtilityService.GetFilesAsync(source + Definitions.MediaFolder, permanentID + "-*.*").ConfigureAwait(false))
+					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaFolder + @"\" + file.Name, true));
 			}
 
 			return new JObject()
@@ -719,7 +703,7 @@ namespace net.vieapps.Services.Books
 				{
 					{ "ID", book.ID },
 					{ "Files", book.GetFiles() }
-				}				
+				}
 			}).ConfigureAwait(false);
 		}
 
@@ -1137,7 +1121,7 @@ namespace net.vieapps.Services.Books
 
 #if DEBUG || GENERATORLOGS
 						stopwatch.Stop();
-						this.WriteLog(correlationID,  "Generate MOBI file is completed [" + book.Name + "] - Excution times: " + stopwatch.GetElapsedTimes() + "\r\n" + output);
+						this.WriteLog(correlationID, "Generate MOBI file is completed [" + book.Name + "] - Excution times: " + stopwatch.GetElapsedTimes() + "\r\n" + output);
 #endif
 
 						// call back when done
@@ -1270,27 +1254,13 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Timers for working with background workers & schedulers
-		internal List<System.Timers.Timer> _timers = new List<System.Timers.Timer>();
-		CancellationTokenSource _cancellationTokenSource = null;
-		Crawler _crawler = new Crawler();
-		bool _isCrawlerRunning = false;
+		Crawler Crawler { get; set; }
+		bool IsCrawlerRunning { get; set; }
 
-		void StartTimer(int interval, Action<object, System.Timers.ElapsedEventArgs> action, bool autoReset = true)
-		{
-			var timer = new System.Timers.Timer()
-			{
-				Interval = interval * 1000,
-				AutoReset = autoReset
-			};
-			timer.Elapsed += new System.Timers.ElapsedEventHandler(action);
-			timer.Start();
-			this._timers.Add(timer);
-		}
-
-		void RegisterTimers()
+		void RegisterTimers(string[] args = null)
 		{
 			// delete old .EPUB & .MOBI files
-			this.StartTimer(60 * 60, (sender, args) =>
+			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-30);
 				UtilityService.GetFiles(Utility.FolderOfDataFiles, "*.epub|*.mobi", true)
@@ -1304,49 +1274,77 @@ namespace net.vieapps.Services.Books
 						}
 						catch { }
 					});
-			});
+			}, 2 * 60 * 60);
 
-			// scan new e-books from iSach.info & VnThuQuan.net
-			this._cancellationTokenSource = new CancellationTokenSource();
-			this.StartTimer(8 * 60 * 60, (sender, args) =>
+			// scan new e-books
+			this.IsCrawlerRunning = false;
+			this.Crawler = new Crawler()
 			{
-				if (!this._isCrawlerRunning)
-					this.RunCrawler();
-			});
+				UpdateLogs = (log, ex, updateCentralizedLogs) =>
+				{
+					this.WriteLog(this.Crawler.CorrelationID, log, ex, updateCentralizedLogs);
+				}
+			};
 
-			// run the crawler at start-up time
-			if ("true".IsEquals(UtilityService.GetAppSetting("BookRunCrawlerAtStartup", "true")))
-				this.RunCrawler();
-		}
+			var runAtStartup = UtilityService.GetAppSetting("BookRunCrawlerAtStartup");
+			if (runAtStartup == null)
+				runAtStartup = args?.FirstOrDefault(a => a.StartsWith("/run-crawler-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/run-crawler-at-startup:", "");
 
-		void RunCrawler()
-		{
-			var correlationID = UtilityService.NewUID;
-			this.WriteLog(correlationID, "Start the crawler");
-			this._isCrawlerRunning = true;
-			this._crawler.Start(
-				(book) =>
-				{
-				},
-				(crawler, times) =>
-				{
-					this.WriteLog(correlationID, 
-						$"The process of crawler is done - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
-						"--------------------------------------------------------------" + "\r\n" +
-						string.Join("\r\n", crawler.Logs) + "\r\n"
-						+ "--------------------------------------------------------------"
-					);
-					this._isCrawlerRunning = false;
-					this._crawler.Logs.Clear();
-				},
-				(crawler, ex) =>
-				{
-					this.WriteLog(correlationID, "Error occurred while crawling", ex);
-					this._isCrawlerRunning = false;
-					this._crawler.Logs.Clear();
-				},
-				this._cancellationTokenSource.Token
-			);
+			this.StartTimer(() =>
+			{
+				if (this.IsCrawlerRunning)
+					return;
+				this.Crawler.CorrelationID = UtilityService.NewUID;
+				this.WriteLog(this.Crawler.CorrelationID, "Start the crawler");
+				this.IsCrawlerRunning = true;
+				this.Crawler.Start(
+					async (book) =>
+					{
+						// clear related cached
+						try
+						{
+							await Task.WhenAll(
+								Utility.Cache.RemoveAsync(book.GetCacheKey() + "-json"),
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.NotEquals("Status", "Inactive"), Sorts<Book>.Descending("LastUpdated")),
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), Filters<Book>.NotEquals("Status", "Inactive")), Sorts<Book>.Descending("LastUpdated")),
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), Filters<Book>.NotEquals("Status", "Inactive")), Sorts<Book>.Descending("LastUpdated"))
+							).ConfigureAwait(false);
+						}
+						catch { }
+
+						// send update message
+						await this.SendUpdateMessageAsync(new UpdateMessage()
+						{
+							Type = "Books#Book",
+							DeviceID = "*",
+							Data = book.ToJson()
+						}).ConfigureAwait(false);
+					},
+					(times) =>
+					{
+						this.WriteLog(this.Crawler.CorrelationID, this.ServiceName, "Crawlers",
+							$"The process of crawler is completed - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
+							"--------------------------------------------------------------" + "\r\n" +
+							string.Join("\r\n", this.Crawler.Logs) + "\r\n"
+							+ "--------------------------------------------------------------"
+						);
+						this.IsCrawlerRunning = false;
+						this.Crawler.Logs.Clear();
+					},
+					(ex) =>
+					{
+						this.WriteLog(this.Crawler.CorrelationID, this.ServiceName, "Crawlers",
+							(ex is OperationCanceledException ? "......... Cancelled" : "Error occurred while crawling") + "\r\n" +
+							"--------------------------------------------------------------" + "\r\n" +
+							string.Join("\r\n", this.Crawler.Logs) + "\r\n"
+							+ "--------------------------------------------------------------"
+						, ex);
+						this.IsCrawlerRunning = false;
+						this.Crawler.Logs.Clear();
+					},
+					this.CancellationTokenSource.Token
+				);
+			}, 8 * 60 * 60, "true".IsEquals(runAtStartup) ? 5678 : 0);
 		}
 		#endregion
 

@@ -77,7 +77,7 @@ namespace net.vieapps.Services.Books
 			var filePath = Utility.FolderOfDataFiles + @"\"
 				+ ("no-media-file".IsEquals(name)
 					? "no-image.png"
-					: name.GetFirstChar() + @"\" + Utility.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
+					: name.GetFirstChar() + @"\" + Definitions.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)

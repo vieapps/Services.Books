@@ -13,9 +13,9 @@ using Newtonsoft.Json.Linq;
 using net.vieapps.Components.Utility;
 #endregion
 
-namespace net.vieapps.Services.Books.Parsers.Bookselfs
+namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 {
-	public class VnThuQuan : IBookselfParser
+	public class VnThuQuan : IBookshelfParser
 	{
 
 		#region Properties
@@ -27,21 +27,26 @@ namespace net.vieapps.Services.Books.Parsers.Bookselfs
 		public int CurrentPage { get; set; } = 1;
 		[JsonIgnore]
 		public List<IBookParser> Books { get; set; } = new List<IBookParser>();
+		public string Category { get; set; } = "";
 		public int CategoryIndex { get; set; } = 0;
+		public string Char { get; set; } = "0";
 		[JsonIgnore]
 		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
 		#endregion
 
 		#region Initialize & Finalize
-		public IBookselfParser Initialize(string folder = null)
+		public IBookshelfParser Initialize(string folder = null)
 		{
-			var filePath = (string.IsNullOrWhiteSpace(folder) ? Utility.FolderOfStatisticFiles : folder) + @"\vnthuquan.net.status.json";
+			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "vnthuquan.net.status.json";
 			var json = File.Exists(filePath)
 				? JObject.Parse(UtilityService.ReadTextFile(filePath))
 				: new JObject()
 				{
 					{ "TotalPages", 0 },
 					{ "CurrentPage", 0 },
+					{ "Category", "" },
+					{ "CategoryIndex", 0 },
+					{ "Char", "0" },
 					{ "LastActivity", DateTime.Now },
 				};
 
@@ -63,20 +68,23 @@ namespace net.vieapps.Services.Books.Parsers.Bookselfs
 			return this;
 		}
 
-		public IBookselfParser FinaIize(string folder = null)
+		public IBookshelfParser FinaIize(string folder)
 		{
+			if (string.IsNullOrWhiteSpace(folder))
+				throw new ArgumentNullException(nameof(folder));
+			else if (!Directory.Exists(folder))
+				throw new DirectoryNotFoundException($"Not found [{folder}]");
+
 			var json = JObject.FromObject(this);
 			json.Add(new JProperty("LastActivity", DateTime.Now));
-
-			var filePath = (string.IsNullOrWhiteSpace(folder) ? Utility.FolderOfStatisticFiles : folder) + @"\vnthuquan.net.status.json";
-			UtilityService.WriteTextFile(filePath, json.ToString(Formatting.Indented));
+			UtilityService.WriteTextFile(folder + @"\vnthuquan.net.status.json", json.ToString(Formatting.Indented));
 
 			return this;
 		}
 		#endregion
 
 		#region Parse the bookself to get the listing
-		public async Task<IBookselfParser> ParseAsync(Action<IBookselfParser, long> onCompleted = null, Action<IBookselfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
 			var stopwatch = new Stopwatch();
@@ -84,7 +92,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookselfs
 
 			// get HTML
 			var url = this.UrlPattern;
-			this.UrlParameters?.ForEach((parameter, index) => url = url.Replace("{" + index + "}", parameter));
+			this.UrlParameters.ForEach((parameter, index) => url = url.Replace("{" + index + "}", parameter));
 
 			var html = "";
 			try
@@ -151,7 +159,6 @@ namespace net.vieapps.Services.Books.Parsers.Bookselfs
 			while (start > -1)
 			{
 				var book = new Parsers.Books.VnThuQuan();
-				book.Source = "vnthuquan.net";
 
 				start = html.PositionOf("<a", start + 1) + 1;
 				start = html.PositionOf("href='", start + 1) + 6;

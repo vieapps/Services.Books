@@ -3,6 +3,8 @@ using System;
 using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -177,7 +179,7 @@ namespace net.vieapps.Services.Books
 				if (asNormalized)
 				{
 					obj["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
-						? Utility.MediaUri.NormalizeMediaFileUris(null)
+						? Definitions.MediaUri.NormalizeMediaFileUris(null)
 						: this.Cover.NormalizeMediaFileUris(this);
 
 					obj.Add(new JProperty("TOCs", new JArray()));
@@ -230,6 +232,16 @@ namespace net.vieapps.Services.Books
 			};
 		}
 		#endregion
+
+		internal static Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			var id = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(author)
+				? (title + " - " + author).Trim().ToLower().GetMD5()
+				: null;
+			return !string.IsNullOrWhiteSpace(id)
+				? Book.GetAsync<Book>(id, cancellationToken)
+				: Task.FromResult<Book>(null);
+		}
 
 	}
 }

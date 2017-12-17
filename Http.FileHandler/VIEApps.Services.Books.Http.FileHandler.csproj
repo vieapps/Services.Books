@@ -46,6 +46,10 @@
       <Project>{edd2f296-eb6d-4c3a-80be-03b0ddd982d3}</Project>
       <Name>VIEApps.Services.Files.Http.AbstractHandler</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Parsers\VIEApps.Services.Books.Parsers.csproj">
+      <Project>{d6c7fa4b-dd15-48c5-b525-783e8661c649}</Project>
+      <Name>VIEApps.Services.Books.Parsers</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Service\VIEApps.Services.Books.csproj">
       <Project>{a85d1226-4ad5-43e0-8827-02f5a4837636}</Project>
       <Name>VIEApps.Services.Books</Name>

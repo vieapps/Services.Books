@@ -6,10 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Newtonsoft.Json.Linq;
-
 using net.vieapps.Components.Utility;
-using net.vieapps.Components.Caching;
 #endregion
 
 namespace net.vieapps.Services.Books
@@ -39,19 +36,21 @@ namespace net.vieapps.Services.Books
 		Task<string> FetchChapterAsync(int chapterIndex, Action<int> onStart = null, Action<int, List<string>, long> onCompleted = null, Action<int, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken));
 	}
 
-	public interface IBookselfParser
+	public interface IBookshelfParser
 	{
 		string UrlPattern { get; set; }
 		List<string> UrlParameters { get; set; }
 		int TotalPages { get; set; }
 		int CurrentPage { get; set; }
 		List<IBookParser> Books { get; set; }
+		string Category { get; set; }
 		int CategoryIndex { get; set; }
+		string Char { get; set; }
 		string ReferUrl { get; set; }
 
-		IBookselfParser Initialize(string folder = null);
-		IBookselfParser FinaIize(string folder = null);
-		Task<IBookselfParser> ParseAsync(Action<IBookselfParser, long> onCompleted = null, Action<IBookselfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken));
+		IBookshelfParser Initialize(string folder = null);
+		IBookshelfParser FinaIize(string folder);
+		Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken));
 	}
 
 }

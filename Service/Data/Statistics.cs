@@ -155,7 +155,7 @@ namespace net.vieapps.Services.Books
 							{
 								Name = item.Name,
 								Counters = item.Counters,
-								FirstChar = Utility.GetAuthorName(item.Name).GetFirstChar().ToUpper()
+								FirstChar = item.Name.GetAuthorName().GetFirstChar().ToUpper()
 							};
 
 							this.List.Add(info);

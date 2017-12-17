@@ -1,6 +1,5 @@
 ﻿#region Related components
 using System;
-using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
@@ -8,7 +7,6 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using net.vieapps.Components.Utility;
 #endregion
@@ -57,7 +55,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				// parse to get details
 				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
 				{
-					this.Parse(html);
+					this.ParseBook(html);
 				}
 
 				// permanent identity
@@ -85,14 +83,14 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public async Task<IBookParser> FetchAsync(string url = null,
 			Action<IBookParser> onStart = null, Action<IBookParser, long> onParsed = null, Action<IBookParser, long> onCompleted = null,
 			Action<int> onStartFetchChapter = null, Action<int, List<string>, long> onFetchChapterCompleted = null, Action<int, Exception> onFetchChapterError = null,
-			string folder = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
+			string folderOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
 			bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
 			var stopwatch = new Stopwatch();
 			stopwatch.Start();
 
-			// parse
+			// parse the book
 			onStart?.Invoke(this);
 			await this.ParseAsync(url ?? this.SourceUrl, onParsed, null, cancellationToken).ConfigureAwait(false);
 
@@ -112,10 +110,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			if (first != null && first.Count > 1 && first[1].PositionOf("=\"anhbia\"") > 0)
 			{
 				var cover = this.GetCoverImage(first);
-				if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Utility.MediaUri + cover.GetFilename()))
+				if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Definitions.MediaUri + cover.GetFilename()))
 				{
 					this.MediaFileUrls.Add(cover);
-					this.Cover = Utility.MediaUri + cover.GetFilename();
+					this.Cover = Definitions.MediaUri + cover.GetFilename();
 				}
 				if (this.Chapters[0].PositionOf(cover) > 0)
 				{
@@ -144,9 +142,9 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			// download image files
 			if (this.MediaFileUrls.Count > 0)
 			{
-				folder = folder ?? Utility.FolderOfTempFiles + @"\" + Utility.MediaFolder;
-				onStartDownload?.Invoke(this, folder);
-				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, folder + @"\" + this.PermanentID + "-" + uri.GetFilename(), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
+				folderOfImages = folderOfImages ?? "temp";
+				onStartDownload?.Invoke(this, folderOfImages);
+				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, folderOfImages + @"\" + this.PermanentID + "-" + uri.GetFilename(), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
 			}
 
 			// assign identity
@@ -176,7 +174,20 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get the HTML of the chapter
-				var contents = await this.GetChapterAsync(chapterUrl, cancellationToken).ConfigureAwait(false);
+				List<string> contents = new List<string>();
+				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
+				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
+				{
+					var splitter = "--!!tach_noi_dung!!--";
+					var start = html.PositionOf(splitter);
+					while (start > 0)
+					{
+						contents.Add(html.Substring(0, start));
+						html = html.Remove(0, start + splitter.Length);
+						start = html.PositionOf(splitter);
+					}
+					contents.Add(html);
+				}
 
 				// parse the chapter
 				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
@@ -204,7 +215,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							start = body.PositionOf("src=", start + 1) + 5;
 							end = body.PositionOf(body[start - 1].ToString(), start + 1);
 							var image = body.Substring(start, end - start);
-							if (!image.IsStartsWith(Utility.MediaUri))
+							if (!image.IsStartsWith(Definitions.MediaUri))
 							{
 								var info = UtilityService.GetFileParts(image, false);
 								image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
@@ -214,7 +225,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 									this.MediaFileUrls.Add(image);
 
 								body = body.Remove(start, end - start);
-								body = body.Insert(start, Utility.MediaUri + image.GetFilename());
+								body = body.Insert(start, Definitions.MediaUri + image.GetFilename());
 							}
 							start = body.PositionOf("<img", start + 1);
 						}
@@ -245,11 +256,11 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		async Task<string> IBookParser.FetchChapterAsync(int chapterIndex, Action<int> onStart = null, Action<int, List<string>, long> onCompleted = null, Action<int, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			await this.FetchChapterAsync(chapterIndex, onStart, onCompleted, onError, cancellationToken).ConfigureAwait(false);
-			return this.Chapters[chapterIndex];
+			return chapterIndex > -1 && chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : null;
 		}
 
-		#region Parse the details information
-		void Parse(string html)
+		#region Parse a book
+		void ParseBook(string html)
 		{
 			// title & meta (author & category)
 			var start = html.PositionOf("<div data-role=\"content\">");
@@ -335,27 +346,6 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + this.ID;
 				this.Chapters.Add(chapterUrl);
-			}
-		}
-		#endregion
-
-		#region Get a chapter of the book
-		async Task<List<string>> GetChapterAsync(string chapterUrl, CancellationToken cancellationToken = default(CancellationToken))
-		{
-			var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
-			using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
-			{
-				var splitter = "--!!tach_noi_dung!!--";
-				var contents = new List<string>();
-				var start = html.PositionOf(splitter);
-				while (start > 0)
-				{
-					contents.Add(html.Substring(0, start));
-					html = html.Remove(0, start + splitter.Length);
-					start = html.PositionOf(splitter);
-				}
-				contents.Add(html);
-				return contents;
 			}
 		}
 		#endregion

@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+		<AssemblyName>VIEApps.Services.Books.Parsers</AssemblyName>
+		<AssemblyTitle>VIEApps NGX Books</AssemblyTitle>
+		<Authors>VIEApps.net</Authors>
+		<Company>VIEApps.net</Company>
+		<Product>VIEApps NGX</Product>
+		<Copyright>© 2018 VIEApps.net</Copyright>
+		<Version>10.1.2.1801</Version>
+		<AssemblyVersion>10.1.2.1801</AssemblyVersion>
+		<FileVersion>10.1.2.1801</FileVersion>
+		<InformationalVersion>v10.1.netstandard-2+rev:2018.01.02</InformationalVersion>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<WarningLevel>3</WarningLevel>
+		<DocumentationFile>bin\Debug\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
+		<NoWarn>1701;1702;1705;CS1066</NoWarn>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<WarningLevel>3</WarningLevel>
+		<DocumentationFile>bin\Release\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove=".DS_Store" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="VIEApps.Components.Utility" Version="10.1.4.1801-rc8" />
+	</ItemGroup>
+
+</Project>

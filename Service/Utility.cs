@@ -36,42 +36,29 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		static Cache _Cache = new Cache("VIEApps-Services-Books", Utility.CacheExpirationTime, UtilityService.GetAppSetting("CacheProvider"));
+		static Cache _Cache = null;
 
 		public static Cache Cache
 		{
-			get { return Utility._Cache; }
+			get
+			{
+				return Utility._Cache ?? (Utility._Cache = new Cache("VIEApps-Services-Books", Utility.CacheExpirationTime, UtilityService.GetAppSetting("CacheProvider")));
+			}
 		}
 		#endregion
 
 		#region Configuration settings
-		static string _HttpFilesUri = null;
+		static string _FilesHttpUri = null;
 
-		static string HttpFilesUri
+		static string FilesHttpUri
 		{
 			get
 			{
-				if (string.IsNullOrWhiteSpace(Utility._HttpFilesUri))
-					Utility._HttpFilesUri = UtilityService.GetAppSetting("HttpFilesUri", "https://afs.vieapps.net");
-				while (Utility._HttpFilesUri.EndsWith("/"))
-					Utility._HttpFilesUri = Utility._HttpFilesUri.Left(Utility._HttpFilesUri.Length - 1);
-				return Utility._HttpFilesUri;
-			}
-		}
-
-		public static string MediaUri
-		{
-			get
-			{
-				return "book://media/";
-			}
-		}
-
-		public static string MediaFolder
-		{
-			get
-			{
-				return "media-files";
+				if (string.IsNullOrWhiteSpace(Utility._FilesHttpUri))
+					Utility._FilesHttpUri = UtilityService.GetAppSetting("FilesHttpUri", "https://afs.vieapps.net");
+				while (Utility._FilesHttpUri.EndsWith("/"))
+					Utility._FilesHttpUri = Utility._FilesHttpUri.Left(Utility._FilesHttpUri.Length - 1);
+				return Utility._FilesHttpUri;
 			}
 		}
 
@@ -149,7 +136,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Helper methods
+		#region Avalable characters
 		static List<string> _Chars = null;
 
 		public static List<string> Chars
@@ -203,127 +190,37 @@ namespace net.vieapps.Services.Books
 					? firstChar.ToString().ToLower()
 					: firstChar.ToString().ToUpper();
 		}
+		#endregion
 
-		public static string GetNormalized(this string @string)
+		#region Working with folders & files
+		public static string GetFolderPathOfBook(string name)
 		{
-			int counter = -1;
-			string result = @string.Trim();
-
-			counter = 0;
-			while (counter < 100 && (result.StartsWith("-") || result.StartsWith(".") || result.StartsWith(":")))
-			{
-				result = result.Right(result.Length - 1);
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.EndsWith("-") || result.EndsWith(".") || result.EndsWith(":")))
-			{
-				result = result.Left(result.Length - 1);
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.EndsWith("-") || result.EndsWith(".")))
-			{
-				result = result.Left(result.Length - 1);
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.IndexOf("( ") > -1))
-			{
-				result = result.Replace("( ", "(");
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.IndexOf(" )") > -1))
-			{
-				result = result.Replace(" )", ")");
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.IndexOf("( ") > -1))
-			{
-				result = result.Replace("( ", "(");
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.IndexOf(" )") > -1))
-			{
-				result = result.Replace(" )", ")");
-				counter++;
-			}
-
-			counter = 0;
-			while (counter < 100 && (result.IndexOf("  ") > -1))
-			{
-				result = result.Replace("  ", " ");
-				counter++;
-			}
-
-			return result.Trim().GetCapitalizedWords();
+			return Utility.FolderOfDataFiles + (string.IsNullOrWhiteSpace(name) ? "" : @"\" + name.GetFirstChar().ToLower());
 		}
 
-		public static string GetAuthor(string author)
+		public static string GetFilePathOfBook(string name)
 		{
-			var result
-				= string.IsNullOrWhiteSpace(author)
-					|| author.IsStartsWith("không rõ") || author.IsStartsWith("không xác định")
-					|| author.IsStartsWith("sưu tầm") || author.Equals("vô danh")
-					|| author.IsStartsWith("truyện ma") || author.IsStartsWith("kiếm hiệp")
-					|| author.IsStartsWith("dân gian") || author.IsStartsWith("cổ tích")
-				? "Khuyết Danh"
-				: author.GetNormalized();
-
-			result = result.Replace("(sưu tầm)", "").Replace("(dịch)", "").Trim();
-			result = result.Replace("(phỏng dịch)", "").Replace("phỏng dịch", "").Trim();
-			result = result.Replace("(phóng tác)", "").Replace("phóng tác", "").Trim();
-
-			if (result.Equals("Andecxen")
-				|| (result.IsStartsWith("Hans") && result.EndsWith("Andersen")))
-				result = "Hans Christian Andersen";
-			else if (result.Equals(result.ToUpper()))
-				result = result.ToLower().GetNormalized();
-
-			return result;
+			return Utility.GetFolderPathOfBook(name) + @"\" + UtilityService.GetNormalizedFilename(name);
 		}
 
-		public static string GetAuthorName(string author)
+		public static string GetFilePathOfBook(string title, string author)
 		{
-			var start = author.IndexOf(",");
-			if (start > 0)
-				return author.Substring(0, start);
-
-			var name = author.GetNormalized();
-			var indicators = new List<string>() { "(", "[", "{", "<" };
-			foreach (var indicator in indicators)
-			{
-				start = name.IndexOf(indicator);
-				while (start > -1)
-				{
-					name = name.Remove(start).Trim();
-					start = name.IndexOf(indicator);
-				}
-			}
-
-			indicators = new List<string>() { ".", " ", "-" };
-			foreach (var indicator in indicators)
-			{
-				start = name.IndexOf(indicator);
-				while (start > -1)
-				{
-					name = name.Remove(0, start + indicator.Length).Trim();
-					start = name.IndexOf(indicator);
-				}
-			}
-
-			return name;
+			return Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
 		}
 
+		public static string GetFolderPath(this Book book)
+		{
+			return Utility.GetFolderPathOfBook(book.Name);
+		}
+
+		public static string GetMediaFilePathOfBook(string uri, string name, string identifier)
+		{
+			var path = Utility.GetFolderPathOfBook(name) + @"\" + Definitions.MediaFolder + @"\" + identifier + "-";
+			return uri.Replace(Definitions.MediaUri, path);
+		}
+		#endregion
+
+		#region Working with file (file size, get data of JSON file, ...)
 		public static string GetFileSize(string filePath)
 		{
 			var fileInfo = new FileInfo(filePath);
@@ -371,48 +268,10 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Working with folders & files
-		public static string GetFolderPathOfBook(string name)
-		{
-			return Utility.FolderOfDataFiles + (string.IsNullOrWhiteSpace(name) ? "" : @"\" + name.GetFirstChar().ToLower());
-		}
-
-		public static string GetFolderPath(this Book book)
-		{
-			return Utility.GetFolderPathOfBook(book.Name);
-		}
-
-		public static string GetFilePathOfBook(string name)
-		{
-			return Utility.GetFolderPathOfBook(name) + @"\" + UtilityService.GetNormalizedFilename(name);
-		}
-
-		public static string GetFilePathOfBook(string title, string author)
-		{
-			return Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + Utility.GetAuthor(author)));
-		}
-
-		public static string GetFilePath(this Book book)
-		{
-			return Utility.GetFilePathOfBook(book.Title, book.Author);
-		}
-
-		public static string GetMediaFilePathOfBook(string uri, string name, string identifier)
-		{
-			var path = Utility.GetFolderPathOfBook(name) + @"\" + Utility.MediaFolder + @"\" + identifier + "-";
-			return uri.Replace(Utility.MediaUri, path);
-		}
-
-		public static string GetMediaFilePath(this string uri, Book book)
-		{
-			return Utility.GetMediaFilePathOfBook(uri, book.Name, book.ID);
-		}
-		#endregion
-
 		#region Working with URIs
 		public static string GetMediaFileUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/" + Utility.MediaFolder + "/"
+			return Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/"
 				+ (book != null
 					? book.Title.Url64Encode() + "/" + (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "/"
 					: "no-media-file".Url64Encode() + "/no/cover/image.png");
@@ -422,12 +281,12 @@ namespace net.vieapps.Services.Books
 		{
 			return string.IsNullOrWhiteSpace(content)
 				? content
-				: content.Replace(Utility.MediaUri, book.GetMediaFileUri());
+				: content.Replace(Definitions.MediaUri, book.GetMediaFileUri());
 		}
 
 		public static string GetMediaFilePath(this Book book)
 		{
-			return book.GetFolderPath() + @"\" + Utility.MediaFolder + @"\"
+			return book.GetFolderPath() + @"\" + Definitions.MediaFolder + @"\"
 				+ (book != null
 					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
 					: "no-media-file".Url64Encode() + "/no/cover/image.png");
@@ -437,12 +296,12 @@ namespace net.vieapps.Services.Books
 		{
 			return string.IsNullOrWhiteSpace(content)
 				? content
-				: content.Replace(Utility.MediaUri, book.GetMediaFilePath());
+				: content.Replace(Definitions.MediaUri, book.GetMediaFilePath());
 		}
 
 		public static string GetDownloadUri(this Book book)
 		{
-			return Utility.HttpFilesUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
+			return Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
 		}
 		#endregion
 
