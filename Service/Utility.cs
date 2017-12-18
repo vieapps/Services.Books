@@ -305,13 +305,15 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Copy data from JSON file into book
-		internal static void CopyData(this Book book, JObject json)
+		#region Working with JSON file
+		internal static void Copy(this Book book, JObject json)
 		{
 			book.PermanentID = (json["PermanentID"] as JValue).Value as string;
-			book.SourceUrl = json["SourceUri"] != null
-				? (json["SourceUri"] as JValue).Value as string
-				: "";
+			book.SourceUrl = json["SourceUrl"] != null
+				? (json["SourceUrl"] as JValue).Value as string
+				: json["SourceUri"] != null
+					? (json["SourceUri"] as JValue).Value as string
+					: "";
 
 			book.TOCs = new List<string>();
 			var array = json["TOCs"] as JArray;
@@ -322,6 +324,19 @@ namespace net.vieapps.Services.Books
 			array = json["Chapters"] as JArray;
 			foreach (JValue item in array)
 				book.Chapters.Add(item.Value as string);
+		}
+
+		internal static bool IsExisted(string name)
+		{
+			var isExisted = File.Exists(Utility.GetFolderPathOfBook(name) + @"\" + UtilityService.GetNormalizedFilename(name) + ".json");
+			if (!isExisted)
+				isExisted = File.Exists(Utility.FolderOfTrashFiles + @"\" + UtilityService.GetNormalizedFilename(name) + ".json");
+			return isExisted;
+		}
+
+		internal static bool IsExisted(string title, string author)
+		{
+			return Utility.IsExisted(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
 		}
 		#endregion
 

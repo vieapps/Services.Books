@@ -150,10 +150,12 @@ namespace net.vieapps.Services.Books
 		{
 			// check permissions
 			if (!await this.IsAuthorizedAsync(
-					requestInfo, Components.Security.Action.View, null,
+					requestInfo, 
+					Components.Security.Action.View, 
+					null,
 					(user, privileges) => this.GetPrivileges(user, privileges),
-					(role) => this.GetPrivilegeActions(role)).ConfigureAwait(false)
-				)
+					(role) => this.GetPrivilegeActions(role)
+				).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -290,9 +292,9 @@ namespace net.vieapps.Services.Books
 					var jsonFilePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".json";
 					if (File.Exists(jsonFilePath))
 					{
-						bookJson.CopyData(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8).ConfigureAwait(false)));
+						bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath, Encoding.UTF8).ConfigureAwait(false)));
 						await Utility.Cache.SetAsFragmentsAsync(keyJson, bookJson).ConfigureAwait(false);
-						if (book.SourceUrl != bookJson.SourceUrl)
+						if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
 						{
 							book.SourceUrl = bookJson.SourceUrl;
 							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
@@ -1255,6 +1257,7 @@ namespace net.vieapps.Services.Books
 
 		#region Timers for working with background workers & schedulers
 		Crawler Crawler { get; set; }
+
 		bool IsCrawlerRunning { get; set; }
 
 		void RegisterTimers(string[] args = null)
@@ -1263,7 +1266,7 @@ namespace net.vieapps.Services.Books
 			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-30);
-				UtilityService.GetFiles(Utility.FolderOfDataFiles, "*.epub|*.mobi", true)
+				UtilityService.GetFiles(Utility.FilesPath, "*.epub|*.mobi", true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1294,6 +1297,7 @@ namespace net.vieapps.Services.Books
 			{
 				if (this.IsCrawlerRunning)
 					return;
+
 				this.Crawler.CorrelationID = UtilityService.NewUID;
 				this.WriteLog(this.Crawler.CorrelationID, "Start the crawler");
 				this.IsCrawlerRunning = true;
@@ -1303,11 +1307,13 @@ namespace net.vieapps.Services.Books
 						// clear related cached
 						try
 						{
+							var filter = Filters<Book>.NotEquals("Status", "Inactive");
+							var sort = Sorts<Book>.Descending("LastUpdated");
 							await Task.WhenAll(
 								Utility.Cache.RemoveAsync(book.GetCacheKey() + "-json"),
-								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.NotEquals("Status", "Inactive"), Sorts<Book>.Descending("LastUpdated")),
-								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), Filters<Book>.NotEquals("Status", "Inactive")), Sorts<Book>.Descending("LastUpdated")),
-								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), Filters<Book>.NotEquals("Status", "Inactive")), Sorts<Book>.Descending("LastUpdated"))
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, filter, sort),
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", filter)), sort),
+								this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
 							).ConfigureAwait(false);
 						}
 						catch { }

@@ -93,7 +93,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 			// parse the book
 			onStart?.Invoke(this);
-			await this.ParseAsync(url ?? this.SourceUrl, onParsed, null, cancellationToken).ConfigureAwait(false);
+			await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
 
 			// cover image
 			if (!string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsStartsWith(Definitions.MediaUri))

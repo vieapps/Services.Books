@@ -106,7 +106,7 @@ namespace net.vieapps.Services.Books
 			while (index < bookParsers.Count)
 			{
 				var parser = bookParsers[index];
-				if (await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false) == null)
+				if (!Utility.IsExisted(parser.Title, parser.Author))
 				{
 					await parser.FetchAsync(
 						parser.SourceUrl,
@@ -129,7 +129,7 @@ namespace net.vieapps.Services.Books
 				}
 				index++;
 			}
-			this.AddLogs($"Total of {success} book(s) of VnThuQuan.net had been crawled");
+			this.AddLogs($"Total {success} book(s) of VnThuQuan.net had been crawled");
 		}
 		#endregion
 
@@ -172,12 +172,13 @@ namespace net.vieapps.Services.Books
 
 			// books
 			this.AddLogs($"Start crawl {bookParsers.Count} book(s) of ISach.info");
+			this.ISachCounter = 0;
 			var folder = Utility.FolderOfContributedFiles + @"\crawlers";
 			int index = 0, success = 0;
 			while (index < bookParsers.Count)
 			{
 				var parser = bookParsers[index];
-				if (await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false) == null)
+				if (!Utility.IsExisted(parser.Title, parser.Author))
 				{
 					// delay
 					var delay = this.ISachCounter > 4 && this.ISachCounter % 5 == 0 ? 3210 : 1500;
@@ -211,7 +212,7 @@ namespace net.vieapps.Services.Books
 				}
 				index++;
 			}
-			this.AddLogs($"Total of {success} book(s) of ISach.info had been crawled");
+			this.AddLogs($"Total {success} book(s) of ISach.info had been crawled");
 		}
 		#endregion
 
@@ -224,10 +225,10 @@ namespace net.vieapps.Services.Books
 				return;
 
 			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(folder + @"\" + filename).ConfigureAwait(false));
-			var book = await Book.GetAsync<Book>((json["ID"] as JValue).Value.ToString(), cancellationToken).ConfigureAwait(false);
+			var book = await Book.GetAsync(title, author, cancellationToken).ConfigureAwait(false);
 			if (book != null)
 			{
-				book.CopyFrom(json);
+				book.CopyFrom(json, "ID".ToHashSet());
 				book.TotalChapters = (json["Chapters"] as JArray).Count;
 				book.LastUpdated = DateTime.Now;
 				await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);

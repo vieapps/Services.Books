@@ -92,7 +92,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 			// parse the book
 			onStart?.Invoke(this);
-			await this.ParseAsync(url ?? this.SourceUrl, onParsed, null, cancellationToken).ConfigureAwait(false);
+			await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
 
 			// fetch the first chapter
 			var first = await this.FetchChapterAsync(0, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);

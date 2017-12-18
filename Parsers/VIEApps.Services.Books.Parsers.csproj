@@ -25,6 +25,7 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
 		<WarningLevel>3</WarningLevel>
 		<DocumentationFile>bin\Release\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
+		<NoWarn>1701;1702;1705;CS1066</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
