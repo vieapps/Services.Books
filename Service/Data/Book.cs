@@ -47,7 +47,6 @@ namespace net.vieapps.Services.Books
 			this.RatingPoints = new List<RatingPoint>();
 			this.TOCs = new List<string>();
 			this.Chapters = new List<string>();
-			this.ChapterUrls = new List<string>();
 			this.MediaFiles = new HashSet<string>();
 		}
 
@@ -136,9 +135,6 @@ namespace net.vieapps.Services.Books
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public List<string> Chapters { get; set; }
-
-		[JsonIgnore, BsonIgnore, Ignore]
-		public List<string> ChapterUrls { get; set; }
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public HashSet<string> MediaFiles { get; set; }

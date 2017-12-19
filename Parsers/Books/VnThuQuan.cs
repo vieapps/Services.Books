@@ -30,6 +30,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Source { get; set; } = "vnthuquan.net";
 		public string SourceUrl { get; set; } = "";
 		public string Credits { get; set; } = "";
+		public string Language { get; set; } = "vi";
+		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
 		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
 		public List<string> TOCs { get; set; } = new List<string>();
@@ -46,10 +48,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var stopwatch = new Stopwatch();
 				stopwatch.Start();
 
-				this.ID = (url ?? this.SourceUrl).GetIdentity();
-				this.SourceUrl = "http://vnthuquan.net/mobil/truyen.aspx?tid=" + this.ID;
-
 				// get HTML of the book
+				this.SourceUrl = "http://vnthuquan.net/mobil/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// parse to get details
@@ -92,51 +92,58 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 			// parse the book
 			onStart?.Invoke(this);
-			await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
-
-			// fetch the first chapter
-			var first = await this.FetchChapterAsync(0, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
-
-			// compute other information (original, translator, ...)
-			if (string.IsNullOrWhiteSpace(this.Original))
-				this.Original = this.GetOriginal(first);
-
-			if (string.IsNullOrWhiteSpace(this.Translator))
-				this.Translator = this.GetTranslator(first);
-
-			if (string.IsNullOrWhiteSpace(this.Credits))
-				this.Credits = this.GetCredits(first);
-
-			if (first != null && first.Count > 1 && first[1].PositionOf("=\"anhbia\"") > 0)
+			if (!string.IsNullOrWhiteSpace(url))
 			{
-				var cover = this.GetCoverImage(first);
-				if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Definitions.MediaUri + cover.GetFilename()))
+				await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
+
+				// fetch the first chapter
+				var first = await this.FetchChapterAsync(0, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
+
+				// compute other information (original, translator, ...)
+				if (string.IsNullOrWhiteSpace(this.Original))
+					this.Original = this.GetOriginal(first);
+
+				if (string.IsNullOrWhiteSpace(this.Translator))
+					this.Translator = this.GetTranslator(first);
+
+				if (string.IsNullOrWhiteSpace(this.Credits))
+					this.Credits = this.GetCredits(first);
+
+				if (first != null && first.Count > 1 && first[1].PositionOf("=\"anhbia\"") > 0)
 				{
-					this.MediaFileUrls.Add(cover);
-					this.Cover = Definitions.MediaUri + cover.GetFilename();
-				}
-				if (this.Chapters[0].PositionOf(cover) > 0)
-				{
-					var start = this.Chapters[0].PositionOf("<img");
-					var end = this.Chapters[0].PositionOf(">", start);
-					this.Chapters[0] = this.Chapters[0].Remove(start, end - start + 1);
-					this.Chapters[0] = this.Chapters[0].Replace("<p></p>", "").Replace(StringComparison.OrdinalIgnoreCase, "<p align=\"center\"></p>", "");
+					var cover = this.GetCoverImage(first);
+					if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Definitions.MediaUri + cover.GetFilename()))
+					{
+						this.MediaFileUrls.Add(cover);
+						this.Cover = Definitions.MediaUri + cover.GetFilename();
+					}
+					if (this.Chapters[0].PositionOf(cover) > 0)
+					{
+						var start = this.Chapters[0].PositionOf("<img");
+						var end = this.Chapters[0].PositionOf(">", start);
+						this.Chapters[0] = this.Chapters[0].Remove(start, end - start + 1);
+						this.Chapters[0] = this.Chapters[0].Replace("<p></p>", "").Replace(StringComparison.OrdinalIgnoreCase, "<p align=\"center\"></p>", "");
+					}
 				}
 			}
 
-			// fetch other chapters
-			if (this.Chapters.Count > 1)
+			// fetch chapters
+			if (string.IsNullOrWhiteSpace(url) ? this.Chapters.Count > 0 : this.Chapters.Count > 1)
 			{
 				if (parallelExecutions)
 				{
 					var tasks = new List<Task<List<string>>>();
-					for (var index = 1; index < this.Chapters.Count; index++)
-						tasks.Add(this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken));
+					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
+						tasks.Add(this.Chapters[index].IsStartsWith("http://vnthuquan.net")
+							? this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken)
+							: Task.FromResult<List<string>>(null)
+						);
 					await Task.WhenAll(tasks).ConfigureAwait(false);
 				}
 				else
-					for (var index = 1; index < this.Chapters.Count; index++)
-						await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
+					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
+						if (this.Chapters[index].IsStartsWith("http://vnthuquan.net"))
+							await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
 			}
 
 			// download image files
@@ -148,7 +155,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 
 			// assign identity
-			this.ID = this.PermanentID;
+			if (string.IsNullOrWhiteSpace(this.ID) || !this.ID.IsValidUUID())
+				this.ID = this.PermanentID;
 
 			// done
 			stopwatch.Stop();
@@ -306,12 +314,14 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					this.Title = this.Title.ToLower().GetNormalized();
 			}
 
+			// book ID
+			var bookID = this.SourceUrl.GetIdentity();
+
 			// chapters
 			start = html.PositionOf("id=\"mucluc");
 			start = start < 0 ? -1 : html.PositionOf("<ul", start + 1, StringComparison.OrdinalIgnoreCase);
 			start = start < 0 ? -1 : html.PositionOf(">", start + 1, StringComparison.OrdinalIgnoreCase);
 			end = start < 0 ? -1 : html.PositionOf("</ul>", start + 1, StringComparison.OrdinalIgnoreCase);
-
 			if (start > 0 && end > 0)
 			{
 				var info = html.Substring(start + 1, end - start - 1);
@@ -326,7 +336,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					end = start < 0 ? -1 : data.PositionOf("'", start + 1);
 					var chapterId = (end < 0 ? "" : data.Substring(start + 1, end - start - 1)).GetIdentity();
 
-					if (!chapterId.Equals(this.ID) || (chapterId.Equals(this.ID) && this.Chapters.Count < 1))
+					if (!chapterId.Equals(bookID) || (chapterId.Equals(bookID) && this.Chapters.Count < 1))
 					{
 						var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + chapterId;
 						this.Chapters.Add(chapterUrl);
@@ -344,7 +354,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 			else
 			{
-				var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + this.ID;
+				var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + bookID;
 				this.Chapters.Add(chapterUrl);
 			}
 		}

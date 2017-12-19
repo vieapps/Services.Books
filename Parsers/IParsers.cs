@@ -26,6 +26,8 @@ namespace net.vieapps.Services.Books
 		string Source { get; set; }
 		string SourceUrl { get; set; }
 		string Credits { get; set; }
+		string Language { get; set; }
+		int TotalChapters { get; set; }
 		string ReferUrl { get; set; }
 		List<string> TOCs { get; set; }
 		List<string> Chapters { get; set; }

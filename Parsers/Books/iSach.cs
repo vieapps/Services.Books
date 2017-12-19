@@ -30,6 +30,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Source { get; set; } = "isach.info";
 		public string SourceUrl { get; set; } = "";
 		public string Credits { get; set; } = "";
+		public string Language { get; set; } = "vi";
+		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
 		public string ReferUrl { get; set; } = "http://isach.info/mobile/index.php";
 		public List<string> TOCs { get; set; } = new List<string>();
@@ -46,10 +48,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var stopwatch = new Stopwatch();
 				stopwatch.Start();
 
-				this.ID = (url ?? this.SourceUrl).GetIdentity();
-				this.SourceUrl = "http://isach.info/mobile/story.php?story=" + this.ID;
-
 				// get HTML of the book
+				this.SourceUrl = "http://isach.info/mobile/story.php?story=" + (url ?? this.SourceUrl).GetIdentity();
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// check permission
@@ -93,17 +93,18 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 			// parse the book
 			onStart?.Invoke(this);
-			await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
+			if (!string.IsNullOrWhiteSpace(url))
+				await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
 
 			// cover image
-			if (!string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsStartsWith(Definitions.MediaUri))
+			if (!string.IsNullOrWhiteSpace(this.Cover) && !this.Cover.IsStartsWith(Definitions.MediaUri))
 			{
 				this.MediaFileUrls.Add(this.Cover);
 				this.Cover = Definitions.MediaUri + this.Cover.GetFilename();
 			}
 
 			// fetch chapters
-			Func<Task> fastCrawl = async () =>
+			Func<Task> parallelFetch = async () =>
 			{
 				var chaptersOfBigBook = 39;
 				var normalDelayMin = 456;
@@ -120,7 +121,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var isCompleted = false;
 				while (!isCompleted)
 				{
-					var fetchingTasks = new List<Task>();
+					var tasks = new List<Task>();
 					for (var index = start; index < end; index++)
 					{
 						if (index >= this.Chapters.Count)
@@ -129,20 +130,17 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							break;
 						}
 
-						var chapterUrl = this.Chapters[index];
-						if (chapterUrl.Equals("") || !chapterUrl.StartsWith("http://isach.info"))
-							continue;
-
-						fetchingTasks.Add(Task.Run(async () =>
-						{
-							var delay = this.Chapters.Count > chaptersOfBigBook
-								? UtilityService.GetRandomNumber(mediumDelayMin, mediumDelayMax)
-								: UtilityService.GetRandomNumber(normalDelayMin, normalDelayMax);
-							await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-							await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken);
-						}, cancellationToken));
+						if (this.Chapters[index].IsStartsWith("http://isach.info"))
+							tasks.Add(Task.Run(async () =>
+							{
+								var delay = this.Chapters.Count > chaptersOfBigBook
+									? UtilityService.GetRandomNumber(mediumDelayMin, mediumDelayMax)
+									: UtilityService.GetRandomNumber(normalDelayMin, normalDelayMax);
+								await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+								await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken);
+							}, cancellationToken));
 					}
-					await Task.WhenAll(fetchingTasks).ConfigureAwait(false);
+					await Task.WhenAll(tasks).ConfigureAwait(false);
 
 					// go next
 					if (!isCompleted)
@@ -155,7 +153,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 			};
 
-			Func<Task> slowCrawl = async () =>
+			Func<Task> sequenceFetch = async () =>
 			{
 				var chaptersOfLargeBook = 69;
 				var mediumPausePointOfLargeBook = 6; 
@@ -172,7 +170,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var chapterCounter = 0; 
 				var totalChapters = 0;
 				for (var index = 0; index < this.Chapters.Count; index++)
-					if (!this.Chapters[index].Equals("") && this.Chapters[index].StartsWith("http://isach.info"))
+					if (!string.IsNullOrWhiteSpace(this.Chapters[index]) && this.Chapters[index].IsStartsWith("http://isach.info"))
 						totalChapters++;
 
 				var chapterIndex = -1;
@@ -180,34 +178,33 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					chapterIndex++;
 					var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-					if (chapterUrl.Equals("") || !chapterUrl.StartsWith("http://isach.info"))
-						continue;
-
-					var number = totalChapters > chaptersOfBigBook ? mediumPausePointOfLargeBook : mediumPausePointOfBigBook;
-					var delay = chapterCounter > (number - 1) && chapterCounter % number == 0 ? mediumDelay : UtilityService.GetRandomNumber(normalDelayMin, normalDelayMax);
-					if (totalChapters > chaptersOfLargeBook)
+					if (!string.IsNullOrWhiteSpace(chapterUrl) && chapterUrl.IsStartsWith("http://isach.info"))
 					{
-						if (chapterCounter > longPausePointOfLargeBook && chapterCounter % (longPausePointOfLargeBook + 1) == 0)
-							delay = longDelayOfLargeBook;
+						var number = totalChapters > chaptersOfBigBook ? mediumPausePointOfLargeBook : mediumPausePointOfBigBook;
+						var delay = chapterCounter > (number - 1) && chapterCounter % number == 0 ? mediumDelay : UtilityService.GetRandomNumber(normalDelayMin, normalDelayMax);
+						if (totalChapters > chaptersOfLargeBook)
+						{
+							if (chapterCounter > longPausePointOfLargeBook && chapterCounter % (longPausePointOfLargeBook + 1) == 0)
+								delay = longDelayOfLargeBook;
+						}
+						else if (totalChapters > chaptersOfBigBook)
+						{
+							if (chapterCounter > longPausePointOfBigBook && chapterCounter % (longPausePointOfBigBook + 1) == 0)
+								delay = longDelayOfBigBook;
+						}
+						await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+						await this.FetchChapterAsync(chapterIndex, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
 					}
-					else if (totalChapters > chaptersOfBigBook)
-					{
-						if (chapterCounter > longPausePointOfBigBook && chapterCounter % (longPausePointOfBigBook + 1) == 0)
-							delay = longDelayOfBigBook;
-					}
-					await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-					await this.FetchChapterAsync(chapterIndex, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken);
-
 					chapterCounter++;
 				}
 			};
 
-			if (this.Chapters.Count > 1)
+			if (string.IsNullOrWhiteSpace(url) ? this.Chapters.Count > 0 : this.Chapters.Count > 1)
 			{
 				if (parallelExecutions)
-					await fastCrawl().ConfigureAwait(false);
+					await parallelFetch().ConfigureAwait(false);
 				else
-					await slowCrawl().ConfigureAwait(false);
+					await sequenceFetch().ConfigureAwait(false);
 			}
 
 			// download image files
@@ -219,7 +216,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 
 			// assign identity
-			this.ID = this.PermanentID;
+			if (string.IsNullOrWhiteSpace(this.ID) || !this.ID.IsValidUUID())
+				this.ID = this.PermanentID;
 
 			// done
 			stopwatch.Stop();
