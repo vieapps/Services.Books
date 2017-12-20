@@ -84,7 +84,7 @@ namespace net.vieapps.Services.Books
 		#region Crawl books of vnthuquan.net
 		async Task RunCrawlerOfVnThuQuanAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			// load saved
+			// prepare
 			var folder = Utility.FolderOfContributedFiles + @"\crawlers";
 			var filePath = folder + @"\vnthuquan.net.json";
 			var bookParsers = new List<IBookParser>();
@@ -98,14 +98,13 @@ namespace net.vieapps.Services.Books
 			// crawl bookself
 			else
 			{
-				// crawl
 				var bookshelfParser = new Parsers.Bookshelfs.VnThuQuan().Initialize();
 				while (bookshelfParser.CurrentPage <= this.MaxPages)
 				{
-					this.AddLogs($"Start crawl the page number {bookshelfParser.CurrentPage} of VnThuQuan.net");
+					this.AddLogs($"Start to crawl the bookshelf of VnThuQuan.net - Page number: {bookshelfParser.CurrentPage}");
 					await bookshelfParser.ParseAsync(
-						(p, times) => this.AddLogs($"Crawl the page number {p.CurrentPage} of VnThuQuan.net is completed in {times.GetElapsedTimes()}"),
-						(p, ex) => this.AddLogs($"Error occurred while crawling the page {p.CurrentPage} of VnThuQuan.net", ex),
+						(p, times) => this.AddLogs($"The page {p.CurrentPage} of VnThuQuan.net's bookshelf is completed - Execution times: {times.GetElapsedTimes()}"),
+						(p, ex) => this.AddLogs($"Error occurred while crawling the bookshelf of VnThuQuan.net - Page number: {p.CurrentPage}", ex),
 						cancellationToken
 					).ConfigureAwait(false);
 					bookParsers = bookParsers.Concat(bookshelfParser.Books).ToList();
@@ -114,7 +113,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// crawl books
-			this.AddLogs($"Start crawl {bookParsers.Count} book(s) of VnThuQuan.net");
+			this.AddLogs($"Start to crawl {bookParsers.Count} book(s) of VnThuQuan.net");
 			var errorParsers = new List<IBookParser>();
 			int index = 0, success = 0;
 			while (index < bookParsers.Count)
@@ -131,6 +130,8 @@ namespace net.vieapps.Services.Books
 						this.AddLogs($"Error occurred while fetching book [{parser.Title} - {parser.SourceUrl}]", ex);
 						errorParsers.Add(parser);
 					}
+				else
+					this.AddLogs($"Bypass the existed book [{parser.Title}");
 
 				// next
 				index++;
@@ -150,14 +151,13 @@ namespace net.vieapps.Services.Books
 		#region Crawl books of isach.info
 		async Task RunCrawlerOfISachAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			// initialize
+			// prepare
 			try
 			{
 				await UtilityService.GetWebPageAsync("http://isach.info/robots.txt", null, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 			}
 			catch { }
 
-			// load saved
 			var folder = Utility.FolderOfContributedFiles + @"\crawlers";
 			var filePath = folder + @"\isach.info.json";
 			var bookParsers = new List<IBookParser>();
@@ -182,9 +182,9 @@ namespace net.vieapps.Services.Books
 					await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
 
 					// crawl
-					this.AddLogs($"Start crawl the page number {bookshelfParser.CurrentPage} of ISach.info ({bookshelfParser.Category + (bookshelfParser.Char != null ? " [" + bookshelfParser.Char + "]" : "")})");
+					this.AddLogs($"Start to crawl the bookshelf of ISach.info - Page number: {bookshelfParser.CurrentPage} ({bookshelfParser.Category + (bookshelfParser.Char != null ? " [" + bookshelfParser.Char + "]" : "")})");
 					await bookshelfParser.ParseAsync(
-						(p, times) => this.AddLogs($"Crawl the page number {p.CurrentPage} of ISach.info ({p.Category + (p.Char != null ? " [" + p.Char + "]" : "")}) is completed in {times.GetElapsedTimes()}"),
+						(p, times) => this.AddLogs($"The page {p.CurrentPage} of ISach.info ({p.Category + (p.Char != null ? " [" + p.Char + "]" : "")}) is completed - Execution times: {times.GetElapsedTimes()}"),
 						(p, ex) => this.AddLogs($"Error occurred while crawling the page {p.CurrentPage} of ISach.info ({p.Category + (p.Char != null ? " [" + p.Char + "]" : "")})", ex),
 						cancellationToken
 					).ConfigureAwait(false);
@@ -224,6 +224,8 @@ namespace net.vieapps.Services.Books
 						this.AddLogs($"Error occurred while fetching book [{parser.Title} - {parser.SourceUrl}]", ex);
 						errorParsers.Add(parser);
 					}
+				else
+					this.AddLogs($"Bypass the existed book [{parser.Title}");
 
 				// next
 				this.ISachCounter++;

@@ -27,6 +27,13 @@ namespace net.vieapps.Services.Books
 		{
 		}
 
+		public override void Dispose()
+		{
+			if (this.Timers.Count > 0)
+				this.FlushStatistics();
+			base.Dispose();
+		}
+
 		~ServiceComponent()
 		{
 			this.Dispose();
@@ -34,31 +41,42 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Start
-		public override void Start(string[] args = null, bool initializeRepository = true, System.Action nextAction = null, Func<Task> nextActionAsync = null)
+		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> next = null)
 		{
-			// prepare folders
-			if (Directory.Exists(Utility.FilesPath))
-				try
-				{
-					this.CreateFolder(Utility.FolderOfDataFiles, false);
-					Utility.Chars.ForEach(@char => this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower()));
-					this.CreateFolder(Utility.FolderOfStatisticFiles, false);
-					this.CreateFolder(Utility.FolderOfContributedFiles, false);
-					this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
-					this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
-					this.CreateFolder(Utility.FolderOfTempFiles);
-					this.CreateFolder(Utility.FolderOfTrashFiles);
-				}
-				catch (Exception ex)
-				{
-					this.WriteLog(UtilityService.NewUID, "Error occurred while preparing the folders of the service", ex);
-				}
+			base.Start(args, initializeRepository, async (service) =>
+			{
+				// prepare folders
+				if (Directory.Exists(Utility.FilesPath))
+					try
+					{
+						this.CreateFolder(Utility.FolderOfDataFiles, false);
+						Utility.Chars.ForEach(@char => this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower()));
+						this.CreateFolder(Utility.FolderOfStatisticFiles, false);
+						this.CreateFolder(Utility.FolderOfContributedFiles, false);
+						this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
+						this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
+						this.CreateFolder(Utility.FolderOfTempFiles);
+						this.CreateFolder(Utility.FolderOfTrashFiles);
+					}
+					catch (Exception ex)
+					{
+						this.WriteLog(UtilityService.NewUID, "Error occurred while preparing the folders of the service", ex);
+					}
 
-			// register timers
-			this.RegisterTimers(args);
+				// register timers
+				this.RegisterTimers(args);
 
-			// start the service
-			base.Start(args, initializeRepository, nextAction, nextActionAsync);
+				// last action
+				if (next != null)
+					try
+					{
+						await next(service).ConfigureAwait(false);
+					}
+					catch (Exception ex)
+					{
+						this.WriteLog(UtilityService.NewUID, "Error occurred while running the next action", ex);
+					}
+			});
 		}
 
 		void CreateFolder(string path, bool mediaFolders = true)
@@ -115,7 +133,7 @@ namespace net.vieapps.Services.Books
 			finally
 			{
 				stopwatch.Stop();
-				await this.WriteLogAsync(requestInfo.CorrelationID, $"The request is completed in: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
+				await this.WriteLogAsync(requestInfo.CorrelationID, $"The request is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 			}
 #endif
 		}
@@ -443,7 +461,7 @@ namespace net.vieapps.Services.Books
 						Utility.FolderOfTempFiles,
 						async (b, token) =>
 						{
-							await this.OnBookUpdated(b, token).ConfigureAwait(false);
+							await this.OnBookUpdatedAsync(b, token).ConfigureAwait(false);
 						},
 						parser is Parsers.Books.ISach
 							? UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>()
@@ -483,36 +501,51 @@ namespace net.vieapps.Services.Books
 			// all statistics (via RTU)
 			else
 			{
-				var messages = new List<BaseMessage>()
-				{
-					new BaseMessage()
-					{
-						Type = "Books#Statistic#Status",
-						Data = this.GetStatisticsOfServiceStatus()
-					},
-					new BaseMessage()
-					{
-						Type = "Books#Statistic#Categories",
-						Data = this.GetStatisticsOfCategories()
-					}
-				};
-				Utility.Chars.ForEach(@char =>
-				{
-					var data = this.GetStatisticsOfAuthors(@char);
-					data.Add(new JProperty("Char", @char));
-
-					messages.Add(new BaseMessage()
-					{
-						Type = "Books#Statistic#Authors",
-						Data = data
-					});
-				});
-
-				await this.SendUpdateMessagesAsync(messages, requestInfo.Session.DeviceID, null, cancellationToken).ConfigureAwait(false);
-
+				await this.SendStatisticsAsync(requestInfo.Session.DeviceID).ConfigureAwait(false);
 				return new JObject();
 			}
 		}
+
+		#region Send statistics
+		async Task SendStatisticsAsync(string deviceID = "*")
+		{
+			// prepare
+			var messages = new List<BaseMessage>()
+			{
+				new BaseMessage()
+				{
+					Type = "Books#Statistic#Status",
+					Data = this.GetStatisticsOfServiceStatus()
+				},
+				new BaseMessage()
+				{
+					Type = "Books#Statistic#Categories",
+					Data = this.GetStatisticsOfCategories()
+				}
+			};
+
+			Utility.Chars.ForEach(@char =>
+			{
+				var data = this.GetStatisticsOfAuthors(@char);
+				data.Add(new JProperty("Char", @char));
+				messages.Add(new BaseMessage()
+				{
+					Type = "Books#Statistic#Authors",
+					Data = data
+				});
+			});
+
+			// send
+			try
+			{
+				await this.SendUpdateMessagesAsync(messages, deviceID, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+			}
+			catch (Exception ex)
+			{
+				await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while sending an update message of statistics", ex).ConfigureAwait(false);
+			}
+		}
+		#endregion
 
 		#region Get statistics
 		JObject GetStatisticsOfServiceStatus()
@@ -541,6 +574,73 @@ namespace net.vieapps.Services.Books
 				{ "Total", authors.Count },
 				{ "Objects", authors.ToJArray(a => a.ToJson()) }
 			};
+		}
+		#endregion
+
+		#region Flush & Re-compute statistics
+		void FlushStatistics()
+		{
+			Utility.Status.Save(Utility.FolderOfStatisticFiles, "status.json");
+			Utility.Categories.Save(Utility.FolderOfStatisticFiles, "categories.json");
+			Utility.Authors.Save(Utility.FolderOfStatisticFiles, "authors-{0}.json", true);
+		}
+
+		async Task RecomputeStatistics()
+		{
+			var stopwatch = new Stopwatch();
+			stopwatch.Start();
+
+			// categories
+			for (var index = 0; index < Utility.Categories.Count; index++)
+			{
+				var info = Utility.Categories[index];
+				info.Counters = (int)await Book.CountAsync<Book>(Filters<Book>.Equals("Category", info.Name), null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+			}
+
+			// authors
+			Utility.Authors.Clear();
+			var totalRecords = await Book.CountAsync(null, null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+			var totalPages = (new Tuple<long, int>(totalRecords, 100)).GetTotalPages();
+			var pageNumber = 0;
+			while (pageNumber < totalPages)
+			{
+				pageNumber++;
+				(await Book.FindAsync(null, Sorts<Book>.Ascending("LastUpdated"), 100, pageNumber, null, this.CancellationTokenSource.Token).ConfigureAwait(false))
+					.ForEach(book =>
+					{
+						var author = Utility.Authors[book.Author];
+						if (author != null)
+							author.Counters++;
+						else
+							Utility.Authors.Add(new StatisticInfo()
+							{
+								Name = book.Author,
+								Counters = 1
+							});
+					});
+			}
+
+			// status
+			Utility.Status.Clear();
+			Utility.Status.Add(new StatisticInfo()
+			{
+				Name = "Books",
+				Counters = totalRecords.CastAs<int>()
+			});
+			Utility.Status.Add(new StatisticInfo()
+			{
+				Name = "Authors",
+				Counters = Utility.Authors.Count
+			});
+
+			// flush into file
+			this.FlushStatistics();
+
+			// send update messages
+			await this.SendStatisticsAsync().ConfigureAwait(false);
+
+			stopwatch.Stop();
+			await this.WriteLogAsync(UtilityService.NewUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 		}
 		#endregion
 
@@ -747,7 +847,7 @@ namespace net.vieapps.Services.Books
 
 				if (!status["epub"])
 					this.GenerateEpubFile(book, correlationID,
-						() =>
+						(p) =>
 						{
 							status["epub"] = true;
 						},
@@ -760,7 +860,7 @@ namespace net.vieapps.Services.Books
 
 				if (!status["mobi"])
 					this.GenerateMobiFile(book, correlationID,
-						() =>
+						(p) =>
 						{
 							status["mobi"] = true;
 						},
@@ -804,7 +904,7 @@ namespace net.vieapps.Services.Books
 
 		public string GetTOCItem(Book book, int index)
 		{
-			string toc = book.TOCs != null && index < book.TOCs.Count
+			var toc = book.TOCs != null && index < book.TOCs.Count
 				? UtilityService.RemoveTag(UtilityService.RemoveTag(book.TOCs[index], "a"), "p")
 				: "";
 
@@ -813,7 +913,7 @@ namespace net.vieapps.Services.Books
 				: toc.GetNormalized().Replace("{0}", (index + 1).ToString());
 		}
 
-		void GenerateEpubFile(Book book, string correlationID = null, System.Action onCompleted = null, Action<Exception> onError = null)
+		void GenerateEpubFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
 		{
 			try
 			{
@@ -854,7 +954,7 @@ namespace net.vieapps.Services.Books
 					epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
 
 				// CSS stylesheet
-				string stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
+				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
 					? book.Stylesheet
 					: @"
 					h1, h2, h3, h4, h5, h6, p, div, blockquote { 
@@ -906,16 +1006,16 @@ namespace net.vieapps.Services.Books
 				// cover image
 				if (!string.IsNullOrWhiteSpace(book.Cover))
 				{
-					byte[] coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
+					var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
 					if (coverData != null && coverData.Length > 0)
 					{
-						string coverId = epub.AddImageData("cover.jpg", coverData);
+						var coverId = epub.AddImageData("cover.jpg", coverData);
 						epub.AddMetaItem("cover", coverId);
 					}
 				}
 
 				// pages & nav points
-				string pageTemplate = @"<!DOCTYPE html>
+				var pageTemplate = @"<!DOCTYPE html>
 				<html xmlns=""http://www.w3.org/1999/xhtml"">
 					<head>
 						<title>{0}</title>
@@ -934,8 +1034,7 @@ namespace net.vieapps.Services.Books
 				</html>".Trim().Replace("\t", "");
 
 				// info
-				string info = "<p class=\"author\">" + book.Author + "</p>"
-										+ "<h1 class=\"title\">" + book.Title + "</h1>";
+				var info = "<p class=\"author\">" + book.Author + "</p>" + "<h1 class=\"title\">" + book.Title + "</h1>";
 
 				if (!string.IsNullOrWhiteSpace(book.Original))
 					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Original: " : "Nguyên tác: ") + "<b><i>" + book.Original + "</i></b></p>";
@@ -952,30 +1051,31 @@ namespace net.vieapps.Services.Books
 					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + "<b><i>" + book.Producer + "</i></b></p>";
 
 				info += "<div class=\"credits\">"
-						+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
-						+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
+					+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
+					+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
 
 				epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
 
 				// chapters
-				for (int index = 0; index < pages.Count; index++)
+				for (var index = 0; index < pages.Count; index++)
 				{
-					string name = string.Format("page{0}.xhtml", index + 1);
-					string content = pages[index].NormalizeMediaFilePaths(book);
+					var name = string.Format("page{0}.xhtml", index + 1);
+					var content = pages[index].NormalizeMediaFilePaths(book);
 
-					int start = content.IndexOf("<img", StringComparison.OrdinalIgnoreCase), end = -1;
+					var start = content.PositionOf("<img");
+					var end = -1;
 					while (start > -1)
 					{
-						start = content.IndexOf("src=", start + 1, StringComparison.OrdinalIgnoreCase) + 5;
-						char @char = content[start - 1];
-						end = content.IndexOf(@char.ToString(), start + 1, StringComparison.OrdinalIgnoreCase);
+						start = content.PositionOf("src=", start + 1) + 5;
+						var @char = content[start - 1];
+						end = content.PositionOf(@char.ToString(), start + 1);
 
-						string image = content.Substring(start, end - start);
-						byte[] imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
+						var image = content.Substring(start, end - start);
+						var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
 						if (imageData != null && imageData.Length > 0)
 							epub.AddImageData(image, imageData);
 
-						start = content.IndexOf("<img", start + 1, StringComparison.OrdinalIgnoreCase);
+						start = content.PositionOf("<img", start + 1);
 					}
 
 					epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
@@ -984,7 +1084,9 @@ namespace net.vieapps.Services.Books
 				}
 
 				// save into file on disc
-				epub.Generate(book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".epub");
+				var filePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".epub";
+				epub.Generate(filePath);
+
 				try
 				{
 					Directory.Delete(epub.GetTempDirectory(), true);
@@ -993,11 +1095,11 @@ namespace net.vieapps.Services.Books
 
 #if DEBUG || GENERATORLOGS
 				stopwatch.Stop();
-				this.WriteLog(correlationID, "Generate EPUB file is completed [" + book.Name + "] - Excution times: " + stopwatch.GetElapsedTimes());
+				this.WriteLog(correlationID, $"Generate EPUB file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}");
 #endif
 
 				// callback when done
-				onCompleted?.Invoke();
+				onCompleted?.Invoke(filePath);
 			}
 			catch (Exception ex)
 			{
@@ -1005,7 +1107,7 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		void GenerateMobiFile(Book book, string correlationID = null, System.Action onCompleted = null, Action<Exception> onError = null)
+		void GenerateMobiFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
 		{
 			try
 			{
@@ -1016,8 +1118,8 @@ namespace net.vieapps.Services.Books
 #endif
 
 				// file name & path
-				string filename = book.ID;
-				string filePath = book.GetFolderPath() + @"\";
+				var filename = book.ID;
+				var filePath = book.GetFolderPath() + @"\";
 
 				// prepare HTML
 				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
@@ -1063,55 +1165,56 @@ namespace net.vieapps.Services.Books
 							font-size: 0.8em;
 						}";
 
-				string content = "<!DOCTYPE html>" + "\n"
-						+ "<html xmlns=\"http://www.w3.org/1999/xhtml\">" + "\n"
-						+ "<head>" + "\n"
-						+ "<title>" + book.Title + "</title>" + "\n"
-						+ "<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>" + "\n"
-						+ "<meta name=\"content-language\" content=\"" + book.Language + "\"/>" + "\n"
-						+ (string.IsNullOrWhiteSpace(book.Author) ? "" : "<meta name=\"author\" content=\"" + book.Author + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Original) ? "" : "<meta name=\"book:Original\" content=\"" + book.Original + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Translator) ? "" : "<meta name=\"book:Translator\" content=\"" + book.Translator + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Category) ? "" : "<meta name=\"book:Category\" content=\"" + book.Category + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Cover) ? "" : "<meta name=\"book:Cover\" content=\"" + book.Cover.NormalizeMediaFilePaths(book) + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Publisher) ? "" : "<meta name=\"book:Publisher\" content=\"" + book.Publisher + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Producer) ? "" : "<meta name=\"book:Publisher\" content=\"" + book.Producer + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Source) ? "" : "<meta name=\"book:Source\" content=\"" + book.Source + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.SourceUrl) ? "" : "<meta name=\"book:SourceUrl\" content=\"" + book.SourceUrl + "\"/>" + "\n")
-						+ (string.IsNullOrWhiteSpace(book.Tags) ? "" : "<meta name=\"book:Tags\" content=\"" + book.Tags + "\"/>" + "\n")
-						+ "<meta name=\"book:PermanentID\" content=\"" + book.PermanentID + "\"/>" + "\n"
-						+ "<style type=\"text/css\">" + stylesheet.Replace("\t", "") + "</style>" + "\n"
-						+ "</head>" + "\n"
-						+ "<body>" + "\n"
-						+ "<a name=\"start\"></a>" + "\n"
-						+ (string.IsNullOrWhiteSpace(book.Author) ? "" : "<p class=\"author\">" + book.Author + "</p>" + "\n")
-						+ "<h1 class=\"title\">" + book.Title + "</h1>" + "\n"
-						+ (string.IsNullOrWhiteSpace(book.Translator) ? "" : "<p class=\"translator\">Dịch giả: " + book.Translator + "</p>" + "\n")
-						+ "\n";
+				var content = "<!DOCTYPE html>" + "\n"
+					+ "<html xmlns=\"http://www.w3.org/1999/xhtml\">" + "\n"
+					+ "<head>" + "\n"
+					+ "<title>" + book.Title + "</title>" + "\n"
+					+ "<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>" + "\n"
+					+ "<meta name=\"content-language\" content=\"" + book.Language + "\"/>" + "\n"
+					+ (string.IsNullOrWhiteSpace(book.Author) ? "" : "<meta name=\"author\" content=\"" + book.Author + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Original) ? "" : "<meta name=\"book:Original\" content=\"" + book.Original + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Translator) ? "" : "<meta name=\"book:Translator\" content=\"" + book.Translator + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Category) ? "" : "<meta name=\"book:Category\" content=\"" + book.Category + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Cover) ? "" : "<meta name=\"book:Cover\" content=\"" + book.Cover.NormalizeMediaFilePaths(book) + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Publisher) ? "" : "<meta name=\"book:Publisher\" content=\"" + book.Publisher + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Producer) ? "" : "<meta name=\"book:Publisher\" content=\"" + book.Producer + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Source) ? "" : "<meta name=\"book:Source\" content=\"" + book.Source + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.SourceUrl) ? "" : "<meta name=\"book:SourceUrl\" content=\"" + book.SourceUrl + "\"/>" + "\n")
+					+ (string.IsNullOrWhiteSpace(book.Tags) ? "" : "<meta name=\"book:Tags\" content=\"" + book.Tags + "\"/>" + "\n")
+					+ "<meta name=\"book:PermanentID\" content=\"" + book.PermanentID + "\"/>" + "\n"
+					+ "<style type=\"text/css\">" + stylesheet.Replace("\t", "") + "</style>" + "\n"
+					+ "</head>" + "\n"
+					+ "<body>" + "\n"
+					+ "<a name=\"start\"></a>" + "\n"
+					+ (string.IsNullOrWhiteSpace(book.Author) ? "" : "<p class=\"author\">" + book.Author + "</p>" + "\n")
+					+ "<h1 class=\"title\">" + book.Title + "</h1>" + "\n"
+					+ (string.IsNullOrWhiteSpace(book.Translator) ? "" : "<p class=\"translator\">Dịch giả: " + book.Translator + "</p>" + "\n")
+					+ "\n";
 
 				content += this.PageBreak
-						+ "\n"
-						+ "<h1 class=\"credits\">" + (book.Language.Equals("en") ? "INFO" : "THÔNG TIN") + "</h1>"
-						+ (!string.IsNullOrWhiteSpace(book.Publisher) ? "\n<p>" + (book.Language.Equals("en") ? "Publisher: " : "NXB: ") + book.Publisher + "</p>" : "")
-						+ (!string.IsNullOrWhiteSpace(book.Producer) ? "\n<p>" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + book.Producer + "</p>" : "")
-						+ (!string.IsNullOrWhiteSpace(book.Source) ? "\n<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + book.Source + "</p>" : "")
-						+ "\n" + this.CreditsInApp + "\n\n";
+					+ "\n"
+					+ "<h1 class=\"credits\">" + (book.Language.Equals("en") ? "INFO" : "THÔNG TIN") + "</h1>"
+					+ (!string.IsNullOrWhiteSpace(book.Publisher) ? "\n<p>" + (book.Language.Equals("en") ? "Publisher: " : "NXB: ") + book.Publisher + "</p>" : "")
+					+ (!string.IsNullOrWhiteSpace(book.Producer) ? "\n<p>" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + book.Producer + "</p>" : "")
+					+ (!string.IsNullOrWhiteSpace(book.Source) ? "\n<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + book.Source + "</p>" : "")
+					+ "\n" + this.CreditsInApp + "\n\n";
 
-				string[] headingTags = "h1|h2|h3|h4|h5|h6".Split('|');
-				string toc = "", body = "";
+				var headingTags = "h1|h2|h3|h4|h5|h6".Split('|');
+				var toc = "";
+				var body = "";
 				if (book.Chapters != null && book.Chapters.Count > 0)
-					for (int index = 0; index < book.Chapters.Count; index++)
+					for (var index = 0; index < book.Chapters.Count; index++)
 					{
-						string chapter = book.Chapters[index].NormalizeMediaFileUris(book);
-						foreach (string tag in headingTags)
+						var chapter = book.Chapters[index].NormalizeMediaFileUris(book);
+						foreach (var tag in headingTags)
 							chapter = chapter.Replace(StringComparison.OrdinalIgnoreCase, "<" + tag + ">", "\n<" + tag + ">").Replace(StringComparison.OrdinalIgnoreCase, "</" + tag + ">", "</" + tag + ">\n");
 						chapter = chapter.Trim().Replace("</p><p>", "</p>\n<p>").Replace("\n\n", "\n");
 
 						toc += book.Chapters.Count > 1 ? (!toc.Equals("") ? "\n" : "") + "<p><a href=\"#chapter" + (index + 1) + "\">" + this.GetTOCItem(book, index) + "</a></p>" : "";
 						body += this.PageBreak + "\n"
-									+ "<a name=\"chapter" + (index + 1) + "\"></a>" + "\n"
-									+ chapter
-									+ "\n\n";
+							+ "<a name=\"chapter" + (index + 1) + "\"></a>" + "\n"
+							+ chapter
+							+ "\n\n";
 					}
 
 				if (!string.IsNullOrWhiteSpace(toc))
@@ -1131,16 +1234,16 @@ namespace net.vieapps.Services.Books
 				if (book.TOCs != null && book.TOCs.Count > 0)
 				{
 					content = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + "\n"
-							+ "<!DOCTYPE ncx PUBLIC \" -//NISO//DTD ncx 2005-1//EN\" \"http://www.daisy.org/z3986/2005/ncx-2005-1.dtd\">" + "\n"
-							+ "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\">" + "\n"
-							+ "<head>" + "\n"
-							+ "<meta name=\"dtb:uid\" content=\"urn:uuid:dbe" + UtilityService.GetUUID(book.ID) + "\"/>" + "\n"
-							+ "</head>" + "\n"
-							+ "<docTitle><text>" + book.Title + @"</text></docTitle>" + "\n"
-							+ "<docAuthor><text>" + book.Author + @"</text></docAuthor>" + "\n"
-							+ "<navMap>";
+						+ "<!DOCTYPE ncx PUBLIC \" -//NISO//DTD ncx 2005-1//EN\" \"http://www.daisy.org/z3986/2005/ncx-2005-1.dtd\">" + "\n"
+						+ "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\">" + "\n"
+						+ "<head>" + "\n"
+						+ "<meta name=\"dtb:uid\" content=\"urn:uuid:dbe" + UtilityService.GetUUID(book.ID) + "\"/>" + "\n"
+						+ "</head>" + "\n"
+						+ "<docTitle><text>" + book.Title + @"</text></docTitle>" + "\n"
+						+ "<docAuthor><text>" + book.Author + @"</text></docAuthor>" + "\n"
+						+ "<navMap>";
 
-					for (int index = 0; index < book.TOCs.Count; index++)
+					for (var index = 0; index < book.TOCs.Count; index++)
 						content += "<navPoint id=\"navid" + (index + 1) + "\" playOrder=\"" + (index + 1) + "\">" + "\n"
 							+ "<navLabel>" + "\n"
 							+ "<text>" + this.GetTOCItem(book, index) + "</text>" + "\n"
@@ -1148,8 +1251,7 @@ namespace net.vieapps.Services.Books
 							+ "<content src=\"" + filename + ".html#chapter" + (index + 1) + "\"/>" + "\n"
 							+ "</navPoint>" + "\n";
 
-					content += "</navMap>" + "\n"
-							+ "</ncx>";
+					content += "</navMap>" + "\n" + "</ncx>";
 
 					// geneate NCX file
 					UtilityService.WriteTextFile(filePath + filename + ".ncx", content, false);
@@ -1184,7 +1286,7 @@ namespace net.vieapps.Services.Books
 				UtilityService.WriteTextFile(filePath + filename + ".opf", content, false);
 
 				// generate MOBI
-				string generator = UtilityService.GetAppSetting("Mobi.Generator", "VIEApps.Services.Books.Mobi.Generator.dll");
+				var generator = UtilityService.GetAppSetting("BookGenerator.Mobi", "VIEApps.Services.Books.Mobi.Generator.dll");
 				var output = "";
 
 				UtilityService.RunProcess(generator, "\"" + filePath + filename + ".opf\"",
@@ -1206,11 +1308,11 @@ namespace net.vieapps.Services.Books
 
 #if DEBUG || GENERATORLOGS
 						stopwatch.Stop();
-						this.WriteLog(correlationID, "Generate MOBI file is completed [" + book.Name + "] - Excution times: " + stopwatch.GetElapsedTimes() + "\r\n" + output);
+						this.WriteLog(correlationID, $"Generate MOBI file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}\r\n{output}");
 #endif
 
 						// call back when done
-						onCompleted?.Invoke();
+						onCompleted?.Invoke(filePath + UtilityService.GetNormalizedFilename(book.Name) + ".mobi");
 					},
 					(sender, args) =>
 					{
@@ -1280,16 +1382,17 @@ namespace net.vieapps.Services.Books
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
-					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
-					await sessions.Where(s => s.Item4).ForEachAsync(async (session, token) =>
-					{
-						await this.SendUpdateMessageAsync(new UpdateMessage()
+					await (await this.GetSessionsAsync(requestInfo).ConfigureAwait(false))
+						.Where(s => s.Item4)
+						.ForEachAsync(async (session, token) =>
 						{
-							Type = "Books#Bookmarks",
-							DeviceID = session.Item2,
-							Data = data
-						}, token).ConfigureAwait(false);
-					}, cancellationToken).ConfigureAwait(false);
+							await this.SendUpdateMessageAsync(new UpdateMessage()
+							{
+								Type = "Books#Bookmarks",
+								DeviceID = session.Item2,
+								Data = data
+							}, token).ConfigureAwait(false);
+						}, cancellationToken).ConfigureAwait(false);
 
 					return data;
 			}
@@ -1314,7 +1417,7 @@ namespace net.vieapps.Services.Books
 					{
 						Task.Run(async () =>
 						{
-							var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString());
+							var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString()).ConfigureAwait(false);
 							await this.SendUpdateMessageAsync(new UpdateMessage()
 							{
 								DeviceID = "*",
@@ -1327,21 +1430,17 @@ namespace net.vieapps.Services.Books
 					this.WriteLog(UtilityService.NewUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
 #endif
 				}
-#if DEBUG
 				catch (Exception ex)
 				{
 					this.WriteLog(UtilityService.NewUID, "Error occurred while updating counters", ex);
 				}
-#else
-				catch { }
-#endif
 		}
 		#endregion
 
 		#region Timers for working with background workers & schedulers
-		Crawler Crawler { get; set; }
+		public Crawler Crawler { get; private set; }
 
-		bool IsCrawlerRunning { get; set; }
+		public bool IsCrawlerRunning { get; private set; }
 
 		void RegisterTimers(string[] args = null)
 		{
@@ -1361,6 +1460,23 @@ namespace net.vieapps.Services.Books
 						catch { }
 					});
 			}, 2 * 60 * 60);
+
+			// delete trash files
+			this.StartTimer(() =>
+			{
+				var remainTime = DateTime.Now.AddDays(-90);
+				UtilityService.GetFiles(Utility.FolderOfTrashFiles, "*.*", true)
+					.Where(file => file.LastWriteTime < remainTime)
+					.ToList()
+					.ForEach(file =>
+					{
+						try
+						{
+							file.Delete();
+						}
+						catch { }
+					});
+			}, 12 * 60 * 60);
 
 			// scan new e-books
 			this.IsCrawlerRunning = false;
@@ -1387,12 +1503,13 @@ namespace net.vieapps.Services.Books
 				this.Crawler.Start(
 					async (book, token) =>
 					{
-						await this.OnBookUpdated(book, token).ConfigureAwait(false);
+						await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false);
+						await this.UpdateStatiscticsAsync(book, false, token).ConfigureAwait(false);
 					},
 					(times) =>
 					{
 						this.WriteLog(this.Crawler.CorrelationID, this.ServiceName, "Crawlers",
-							$"The process of crawler is completed - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
+							$"The crawler is completed - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
 							"--------------------------------------------------------------" + "\r\n" +
 							string.Join("\r\n", this.Crawler.Logs) + "\r\n"
 							+ "--------------------------------------------------------------"
@@ -1414,10 +1531,40 @@ namespace net.vieapps.Services.Books
 					this.CancellationTokenSource.Token
 				);
 			}, 8 * 60 * 60, "true".IsEquals(runAtStartup) ? 5678 : 0);
+
+			// flush statistics (hourly)
+			this.StartTimer(() =>
+			{
+				try
+				{
+					this.FlushStatistics();
+				}
+				catch { }
+			}, 60 * 60);
+
+			// recompute statistics
+			var recomputeStatisticsAtStartup = UtilityService.GetAppSetting("BookRecomputeStatisticsAtStartup");
+			if (recomputeStatisticsAtStartup == null)
+				recomputeStatisticsAtStartup = args?.FirstOrDefault(a => a.StartsWith("/recompute-statistics-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/recompute-statistics-at-startup:", "");
+
+			if ("true".IsEquals(recomputeStatisticsAtStartup))
+				Task.Run(async () =>
+				{
+					try
+					{
+						await this.WriteLogAsync(UtilityService.NewUID, "Start to re-compute statistics").ConfigureAwait(false);
+						await this.RecomputeStatistics().ConfigureAwait(false);
+					}
+					catch (Exception ex)
+					{
+						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
+					}
+				});
 		}
 		#endregion
 
-		async Task OnBookUpdated(Book book, CancellationToken cancellationToken = default(CancellationToken))
+		#region Update book & statistics when related information are changed
+		async Task OnBookUpdatedAsync(Book book, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// clear related cached
 			try
@@ -1444,5 +1591,52 @@ namespace net.vieapps.Services.Books
 				Data = book.ToJson()
 			}, cancellationToken).ConfigureAwait(false);
 		}
+
+		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			// update statistic on deleted
+			if (isDeleted)
+			{
+				var category = Utility.Categories[book.Category];
+				if (category != null)
+					category.Counters--;
+				var author = Utility.Authors[book.Author];
+				if (author != null)
+					author.Counters--;
+				var books = Utility.Status["Books"];
+				if (books != null)
+					books.Counters--;
+			}
+
+			// update statistic on created
+			else
+			{
+				var category = Utility.Categories[book.Category];
+				if (category != null)
+					category.Counters++;
+				var author = Utility.Authors[book.Author];
+				if (author != null)
+					author.Counters++;
+				else
+				{
+					Utility.Authors.Add(new StatisticInfo()
+					{
+						Name = book.Author,
+						Counters = 1
+					});
+					var authors = Utility.Status["Authors"];
+					if (authors != null)
+						authors.Counters++;
+				}
+				var books = Utility.Status["Books"];
+				if (books != null)
+					books.Counters++;
+			}
+
+			// send the updating message
+			await this.SendStatisticsAsync().ConfigureAwait(false);
+		}
+		#endregion
+
 	}
 }

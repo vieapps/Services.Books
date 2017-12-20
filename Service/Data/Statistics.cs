@@ -103,21 +103,21 @@ namespace net.vieapps.Services.Books
 			{
 				if (sortBy.IsEquals("Name"))
 					list = "Ascending".IsEquals(sortMode)
-							? list.OrderBy(item => item.FirstChar)
-								.ThenBy(item => item.Name)
-								.ThenByDescending(item => item.Counters)
-							: list.OrderByDescending(item => item.FirstChar)
-								.ThenByDescending(item => item.Name)
-								.ThenByDescending(item => item.Counters);
+						? list.OrderBy(item => item.FirstChar)
+							.ThenBy(item => item.Name)
+							.ThenByDescending(item => item.Counters)
+						: list.OrderByDescending(item => item.FirstChar)
+							.ThenByDescending(item => item.Name)
+							.ThenByDescending(item => item.Counters);
 
 				else if (sortBy.IsEquals("Counters"))
 					list = "Ascending".IsEquals(sortMode)
-							? list.OrderBy(item => item.Counters)
-								.ThenBy(item => item.FirstChar)
-								.ThenBy(item => item.Name)
-							: list.OrderByDescending(item => item.Counters)
-								.ThenBy(item => item.FirstChar)
-								.ThenBy(item => item.Name);
+						? list.OrderBy(item => item.Counters)
+							.ThenBy(item => item.FirstChar)
+							.ThenBy(item => item.Name)
+						: list.OrderByDescending(item => item.Counters)
+							.ThenBy(item => item.FirstChar)
+							.ThenBy(item => item.Name);
 			}
 
 			if (skip > 0)
@@ -127,6 +127,11 @@ namespace net.vieapps.Services.Books
 				list = list.Take(take);
 
 			return list;
+		}
+
+		public void Clear()
+		{
+			this.List.Clear();
 		}
 
 		public override string ToString()
@@ -168,7 +173,7 @@ namespace net.vieapps.Services.Books
 
 		internal void Save(string path, string filename, bool seperatedByFirstChar = false)
 		{
-			string filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + @"\") + filename;
+			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + @"\") + filename;
 
 			if (seperatedByFirstChar)
 				Utility.Chars.ForEach(@char =>
