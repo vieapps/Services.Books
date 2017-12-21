@@ -107,8 +107,8 @@ namespace net.vieapps.Services.Books
 						(p, ex) => this.AddLogs($"Error occurred while crawling the bookshelf of VnThuQuan.net - Page number: {p.CurrentPage}", ex),
 						cancellationToken
 					).ConfigureAwait(false);
-					bookParsers = bookParsers.Concat(bookshelfParser.Books).ToList();
-					bookshelfParser.CurrentPage++;
+					bookParsers = bookParsers.Concat(bookshelfParser.BookParsers).ToList();
+					bookshelfParser.Prepare();
 				}
 			}
 
@@ -131,7 +131,7 @@ namespace net.vieapps.Services.Books
 						errorParsers.Add(parser);
 					}
 				else
-					this.AddLogs($"Bypass the existed book [{parser.Title}");
+					this.AddLogs($"Bypass the existed book [{parser.Title}]");
 
 				// next
 				index++;
@@ -190,10 +190,10 @@ namespace net.vieapps.Services.Books
 					).ConfigureAwait(false);
 
 					// update
-					bookParsers = bookParsers.Concat(bookshelfParser.Books).ToList();
+					bookParsers = bookParsers.Concat(bookshelfParser.BookParsers).ToList();
 					if (bookshelfParser.CurrentPage >= this.MaxPages)
 						bookshelfParser.CurrentPage = bookshelfParser.TotalPages = 1;
-					((Parsers.Bookshelfs.ISach)bookshelfParser).ReCompute();
+					bookshelfParser.Prepare();
 				}
 			}
 
@@ -225,7 +225,7 @@ namespace net.vieapps.Services.Books
 						errorParsers.Add(parser);
 					}
 				else
-					this.AddLogs($"Bypass the existed book [{parser.Title}");
+					this.AddLogs($"Bypass the existed book [{parser.Title}]");
 
 				// next
 				this.ISachCounter++;
@@ -255,7 +255,7 @@ namespace net.vieapps.Services.Books
 				(p) => this.AddLogs($"Start to fetch the book [{p.SourceUrl}]"),
 				(p, times) => this.AddLogs($"The book is parsed [{p.Title} - {p.SourceUrl}] (Execution times: {times.GetElapsedTimes()}) - Start to fetch {p.Chapters.Count} chapter(s)"),
 				(p, times) => this.AddLogs($"The book is fetched [{p.Title}] - Execution times: {times.GetElapsedTimes()}"),
-				(idx) => this.AddLogs($"Start to fetch the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())} - {parser.SourceUrl}]"),
+				(idx) => this.AddLogs($"Start to fetch the chapter [{(idx < parser.TOCs.Count && parser.Chapters[idx].IsStartsWith("http://") ? parser.TOCs[idx] + " - " + parser.Chapters[idx] : idx.ToString())}]"),
 				(idx, contents, times) => this.AddLogs($"The chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}] is fetched - Execution times: {times.GetElapsedTimes()}"),
 				(idx, ex) => this.AddLogs($"Error occurred while fetching the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}]", ex),
 				folder + @"\" + Definitions.MediaFolder,
@@ -287,7 +287,13 @@ namespace net.vieapps.Services.Books
 
 			// update database
 			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(folder + @"\" + filename).ConfigureAwait(false));
-			var book = await Book.GetAsync(title, author, cancellationToken).ConfigureAwait(false);
+			var id = json["ID"] != null
+				? (json["ID"] as JValue).Value as string
+				: null;
+			var book = string.IsNullOrWhiteSpace(id) || !id.IsValidUUID()
+				? await Book.GetAsync(title, author, cancellationToken).ConfigureAwait(false)
+				: await Book.GetAsync<Book>(id, cancellationToken).ConfigureAwait(false);
+
 			if (book != null)
 			{
 				book.CopyFrom(json, "ID".ToHashSet());

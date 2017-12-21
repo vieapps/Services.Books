@@ -167,20 +167,22 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var longDelayOfBigBook = 7890; 
 				var longDelayOfLargeBook = 15431;
 
-				var chapterCounter = 0; 
 				var totalChapters = 0;
 				for (var index = 0; index < this.Chapters.Count; index++)
-					if (!string.IsNullOrWhiteSpace(this.Chapters[index]) && this.Chapters[index].IsStartsWith("http://isach.info"))
+					if (this.Chapters[index].IsStartsWith("http://isach.info"))
 						totalChapters++;
 
+				var chapterCounter = 0;
 				var chapterIndex = -1;
 				while (chapterIndex < this.Chapters.Count)
 				{
 					chapterIndex++;
 					var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-					if (!string.IsNullOrWhiteSpace(chapterUrl) && chapterUrl.IsStartsWith("http://isach.info"))
+					if (chapterUrl.IsStartsWith("http://isach.info"))
 					{
-						var number = totalChapters > chaptersOfBigBook ? mediumPausePointOfLargeBook : mediumPausePointOfBigBook;
+						var number = totalChapters > chaptersOfBigBook
+							? mediumPausePointOfLargeBook
+							: mediumPausePointOfBigBook;
 						var delay = chapterCounter > (number - 1) && chapterCounter % number == 0 ? mediumDelay : UtilityService.GetRandomNumber(normalDelayMin, normalDelayMax);
 						if (totalChapters > chaptersOfLargeBook)
 						{
@@ -199,7 +201,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 			};
 
-			if (string.IsNullOrWhiteSpace(url) ? this.Chapters.Count > 0 : this.Chapters.Count > 1)
+			if (this.Chapters.Count > (string.IsNullOrWhiteSpace(url) ? 0 : 1))
 			{
 				if (parallelExecutions)
 					await parallelFetch().ConfigureAwait(false);
@@ -231,11 +233,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// prepare
 				var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-				if (chapterUrl.Equals("") || !chapterUrl.IsStartsWith("http://isach.info"))
-				{
-					onCompleted?.Invoke(chapterIndex, null, 0);
+				if (!chapterUrl.IsStartsWith("http://isach.info"))
 					return null;
-				}
 
 				// start
 				onStart?.Invoke(chapterIndex);
@@ -246,7 +245,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// parse the chapter
-				List<string> contents;
+				var contents = new List<string>();
 				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
 				{
 					contents = this.ParseChapter(html);

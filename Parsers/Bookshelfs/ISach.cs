@@ -26,7 +26,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		public int TotalPages { get; set; } = 0;
 		public int CurrentPage { get; set; } = 1;
 		[JsonIgnore]
-		public List<IBookParser> Books { get; set; } = new List<IBookParser>();
+		public List<IBookParser> BookParsers { get; set; } = new List<IBookParser>();
 		public string Category { get; set; } = ISach.Categories[0];
 		public int CategoryIndex { get; set; } = 0;
 		public string Char { get; set; } = "0";
@@ -49,7 +49,6 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		}
 		#endregion
 
-		#region Initialize & Finalize
 		public IBookshelfParser Initialize(string folder = null)
 		{
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "isach.info.status.json";
@@ -73,10 +72,24 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				? (json["Char"] as JValue).Value.CastAs<string>()
 				: null;
 
-			return this.ReCompute();
+			return this.Prepare();
 		}
 
-		public IBookshelfParser ReCompute()
+		public IBookshelfParser FinaIize(string folder)
+		{
+			if (string.IsNullOrWhiteSpace(folder))
+				throw new ArgumentNullException(nameof(folder));
+			else if (!Directory.Exists(folder))
+				throw new DirectoryNotFoundException($"Not found [{folder}]");
+
+			var json = JObject.FromObject(this);
+			json.Add(new JProperty("LastActivity", DateTime.Now));
+			UtilityService.WriteTextFile(folder + @"\isach.info.status.json", json.ToString(Formatting.Indented));
+
+			return this;
+		}
+
+		public IBookshelfParser Prepare()
 		{
 			if (this.TotalPages < 1)
 			{
@@ -133,22 +146,6 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			return this;
 		}
 
-		public IBookshelfParser FinaIize(string folder)
-		{
-			if (string.IsNullOrWhiteSpace(folder))
-				throw new ArgumentNullException(nameof(folder));
-			else if (!Directory.Exists(folder))
-				throw new DirectoryNotFoundException($"Not found [{folder}]");
-
-			var json = JObject.FromObject(this);
-			json.Add(new JProperty("LastActivity", DateTime.Now));
-			UtilityService.WriteTextFile(folder + @"\isach.info.status.json", json.ToString(Formatting.Indented));
-
-			return this;
-		}
-		#endregion
-
-		#region Parse the bookself to get the listing
 		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
@@ -217,7 +214,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			}
 
 			// books
-			this.Books = new List<IBookParser>();
+			this.BookParsers = new List<IBookParser>();
 
 			start = html.PositionOf("story_content_list");
 			start = start < 0 ? -1 : html.PositionOf("<div class='ms_list_item'>", start + 1);
@@ -255,11 +252,10 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				end = html.PositionOf("<", start + 1);
 				book.Author = html.Substring(start, end - start).GetAuthor();
 
-				this.Books.Add(book);
+				this.BookParsers.Add(book);
+
 				start = html.PositionOf("<div class='ms_list_item'>", start + 1);
 			}
 		}
-		#endregion
-
 	}
 }

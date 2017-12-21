@@ -22,11 +22,11 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		[JsonIgnore]
 		public string UrlPattern { get; set; } = "";
 		[JsonIgnore]
-		public List<string> UrlParameters { get; set; } = new List<string>();
+		public List<string> UrlParameters { get; set; }
 		public int TotalPages { get; set; } = 0;
 		public int CurrentPage { get; set; } = 1;
 		[JsonIgnore]
-		public List<IBookParser> Books { get; set; } = new List<IBookParser>();
+		public List<IBookParser> BookParsers { get; set; } = new List<IBookParser>();
 		public string Category { get; set; } = "";
 		public int CategoryIndex { get; set; } = 0;
 		public string Char { get; set; } = "0";
@@ -34,7 +34,6 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
 		#endregion
 
-		#region Initialize & Finalize
 		public IBookshelfParser Initialize(string folder = null)
 		{
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "vnthuquan.net.status.json";
@@ -53,19 +52,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			this.TotalPages = (json["TotalPages"] as JValue).Value.CastAs<int>();
 			this.CurrentPage = (json["CurrentPage"] as JValue).Value.CastAs<int>();
 
-			if (this.TotalPages < 1)
-			{
-				this.CurrentPage = 0;
-				this.TotalPages = 0;
-				this.UrlPattern = "http://vnthuquan.net/mobil/?tranghientai={0}";
-			}
-			else if (this.CurrentPage >= this.TotalPages)
-				this.UrlPattern = null;
-
-			this.CurrentPage++;
-			this.UrlParameters.Add(this.CurrentPage.ToString());
-
-			return this;
+			return this.Prepare();
 		}
 
 		public IBookshelfParser FinaIize(string folder)
@@ -81,9 +68,26 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 			return this;
 		}
-		#endregion
 
-		#region Parse the bookself to get the listing
+		public IBookshelfParser Prepare()
+		{
+			if (this.TotalPages < 1)
+			{
+				this.CurrentPage = 0;
+				this.TotalPages = 0;
+				this.UrlPattern = "http://vnthuquan.net/mobil/?tranghientai={0}";
+			}
+			else if (this.CurrentPage >= this.TotalPages)
+				this.UrlPattern = null;
+
+			this.CurrentPage++;
+
+			this.UrlParameters = new List<string>();
+			this.UrlParameters.Add(this.CurrentPage.ToString());
+
+			return this;
+		}
+
 		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
@@ -148,7 +152,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			}
 
 			// books
-			this.Books = new List<IBookParser>();
+			this.BookParsers = new List<IBookParser>();
 
 			start = html.PositionOf("data-role=\"content\"");
 			start = start < 0 ? -1 : html.PositionOf("<ul", start + 1);
@@ -189,12 +193,10 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 					});
 				book.Author = author.GetAuthor();
 
-				this.Books.Add(book);
+				this.BookParsers.Add(book);
 
 				start = html.PositionOf("<li", start + 1);
 			}
 		}
-		#endregion
-
 	}
 }

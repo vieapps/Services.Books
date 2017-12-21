@@ -74,7 +74,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						this.WriteLog(UtilityService.NewUID, "Error occurred while running the next action", ex);
+						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while running the next action", ex).ConfigureAwait(false);
 					}
 			});
 		}
@@ -472,10 +472,10 @@ namespace net.vieapps.Services.Books
 				}
 				catch (Exception ex)
 				{
-					this.WriteLog(correlationID, $"Error occurred while re-crawling a book [{parser.Title} - {parser.SourceUrl}]", ex);
+					await this.WriteLogAsync(correlationID, $"Error occurred while re-crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
 				}
 			else
-				this.WriteLog(correlationID, $"No-parser is matched for re-crawling a book [{sourceUrl}]");
+				await this.WriteLogAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
 
 			// cleanup
 			if (File.Exists(Utility.FolderOfTempFiles + @"\" + filename))
@@ -1461,11 +1461,24 @@ namespace net.vieapps.Services.Books
 					});
 			}, 2 * 60 * 60);
 
-			// delete trash files
+			// delete trash/temp files
 			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-90);
 				UtilityService.GetFiles(Utility.FolderOfTrashFiles, "*.*", true)
+					.Where(file => file.LastWriteTime < remainTime)
+					.ToList()
+					.ForEach(file =>
+					{
+						try
+						{
+							file.Delete();
+						}
+						catch { }
+					});
+
+				remainTime = DateTime.Now.AddDays(-1);
+				UtilityService.GetFiles(Utility.FolderOfTempFiles, "*.*", true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1594,6 +1607,9 @@ namespace net.vieapps.Services.Books
 
 		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))
 		{
+			// prepare
+			//var authors = book.Author.GetAuthorName
+
 			// update statistic on deleted
 			if (isDeleted)
 			{

@@ -44,7 +44,7 @@ namespace net.vieapps.Services.Books
 		List<string> UrlParameters { get; set; }
 		int TotalPages { get; set; }
 		int CurrentPage { get; set; }
-		List<IBookParser> Books { get; set; }
+		List<IBookParser> BookParsers { get; set; }
 		string Category { get; set; }
 		int CategoryIndex { get; set; }
 		string Char { get; set; }
@@ -52,6 +52,7 @@ namespace net.vieapps.Services.Books
 
 		IBookshelfParser Initialize(string folder = null);
 		IBookshelfParser FinaIize(string folder);
+		IBookshelfParser Prepare();
 		Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken));
 	}
 

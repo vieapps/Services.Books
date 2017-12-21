@@ -128,7 +128,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 
 			// fetch chapters
-			if (string.IsNullOrWhiteSpace(url) ? this.Chapters.Count > 0 : this.Chapters.Count > 1)
+			if (this.Chapters.Count > (string.IsNullOrWhiteSpace(url) ? 0 : 1))
 			{
 				if (parallelExecutions)
 				{
@@ -170,11 +170,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// prepare
 				var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-				if (chapterUrl.Equals("") || !chapterUrl.IsStartsWith("http://vnthuquan.net"))
-				{
-					onCompleted?.Invoke(chapterIndex, null, 0);
+				if (!chapterUrl.IsStartsWith("http://vnthuquan.net"))
 					return null;
-				}
 
 				// start
 				onStart?.Invoke(chapterIndex);
@@ -182,7 +179,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get the HTML of the chapter
-				List<string> contents = new List<string>();
+				var contents = new List<string>();
 				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
 				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
 				{
