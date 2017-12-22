@@ -74,10 +74,10 @@ namespace net.vieapps.Services.Books
 			if (!"no-media-file".IsEquals(name) && (requestInfo.Length < 5 || !requestInfo[3].IsValidUUID()))
 				throw new InvalidRequestException();
 
-			var filePath = Utility.FolderOfDataFiles + @"\"
+			var filePath = Utility.FolderOfDataFiles + Path.DirectorySeparatorChar.ToString()
 				+ ("no-media-file".IsEquals(name)
 					? "no-image.png"
-					: name.GetFirstChar() + @"\" + Definitions.MediaFolder + @"\" + requestInfo[3] + "-" + requestInfo[4]);
+					: name.GetFirstChar() + Path.DirectorySeparatorChar.ToString() + Definitions.MediaFolder + Path.DirectorySeparatorChar.ToString() + requestInfo[3] + "-" + requestInfo[4]);
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
@@ -148,7 +148,7 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\" + UtilityService.GetNormalizedFilename(name) + ext);
+			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + Path.DirectorySeparatorChar.ToString() + name.GetFirstChar() + Path.DirectorySeparatorChar.ToString() + UtilityService.GetNormalizedFilename(name) + ext);
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 

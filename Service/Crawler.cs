@@ -47,7 +47,7 @@ namespace net.vieapps.Services.Books
 
 		internal void Start(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			this.MaxPages = UtilityService.GetAppSetting("BookCrawlerMaxPages", "2").CastAs<int>();
+			this.MaxPages = UtilityService.GetAppSetting("BookCrawlerMaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
 			Task.Run(async () =>
@@ -85,8 +85,8 @@ namespace net.vieapps.Services.Books
 		async Task RunCrawlerOfVnThuQuanAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var folder = Utility.FolderOfContributedFiles + @"\crawlers";
-			var filePath = folder + @"\vnthuquan.net.json";
+			var folder = Path.Combine(Utility.FolderOfContributedFiles, "crawlers");
+			var filePath = Path.Combine(folder, "vnthuquan.net.json");
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
 			{
@@ -158,8 +158,8 @@ namespace net.vieapps.Services.Books
 			}
 			catch { }
 
-			var folder = Utility.FolderOfContributedFiles + @"\crawlers";
-			var filePath = folder + @"\isach.info.json";
+			var folder = Path.Combine(Utility.FolderOfContributedFiles, "crawlers");
+			var filePath = Path.Combine(folder, "isach.info.json");
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
 			{
@@ -258,7 +258,7 @@ namespace net.vieapps.Services.Books
 				(idx) => this.AddLogs($"Start to fetch the chapter [{(idx < parser.TOCs.Count && parser.Chapters[idx].IsStartsWith("http://") ? parser.TOCs[idx] + " - " + parser.Chapters[idx] : idx.ToString())}]"),
 				(idx, contents, times) => this.AddLogs($"The chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}] is fetched - Execution times: {times.GetElapsedTimes()}"),
 				(idx, ex) => this.AddLogs($"Error occurred while fetching the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}]", ex),
-				folder + @"\" + Definitions.MediaFolder,
+				Path.Combine(folder, Definitions.MediaFolder),
 				(p, uri) => this.AddLogs($"Start to download images [{uri}]"),
 				(uri, path, times) => this.AddLogs($"Image is downloaded [{uri} - {path}] - Execution times: {times.GetElapsedTimes()}"),
 				(uri, ex) => this.AddLogs($"Error occurred while downloading image file [{uri}]", ex),
@@ -268,7 +268,7 @@ namespace net.vieapps.Services.Books
 
 			// write JSON file
 			parser.TotalChapters = parser.Chapters.Count;
-			await UtilityService.WriteTextFileAsync(folder + @"\" + UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json", parser.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
+			await UtilityService.WriteTextFileAsync(Path.Combine(folder, UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json"), parser.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 
 			// update & return
 			await this.UpdateAsync(parser.Title, parser.Author, folder, onUpdate, cancellationToken).ConfigureAwait(false);
@@ -282,11 +282,11 @@ namespace net.vieapps.Services.Books
 			// check
 			folder = folder ?? Utility.FolderOfTempFiles;
 			var filename = UtilityService.GetNormalizedFilename(title + " - " + author) + ".json";
-			if (!File.Exists(folder + @"\" + filename))
+			if (!File.Exists(Path.Combine(folder, filename)))
 				return null;
 
 			// update database
-			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(folder + @"\" + filename).ConfigureAwait(false));
+			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(folder, filename)).ConfigureAwait(false));
 			var id = json["ID"] != null
 				? (json["ID"] as JValue).Value as string
 				: null;
@@ -309,12 +309,12 @@ namespace net.vieapps.Services.Books
 
 			// update files
 			var path = book.GetFolderPath();
-			File.Copy(folder + @"\" + filename, path + @"\" + filename, true);
-			File.Delete(folder + @"\" + filename);
-			UtilityService.GetFiles(folder + @"\" + Definitions.MediaFolder, book.PermanentID + "-*.*")
+			File.Copy(Path.Combine(folder, filename), Path.Combine(path, filename), true);
+			File.Delete(Path.Combine(folder, filename));
+			UtilityService.GetFiles(Path.Combine(folder, Definitions.MediaFolder), book.PermanentID + "-*.*")
 				.ForEach(file =>
 				{
-					File.Copy(file.FullName, path + @"\" + Definitions.MediaFolder + @"\" + file.Name, true);
+					File.Copy(file.FullName, Path.Combine(path, Definitions.MediaFolder, file.Name), true);
 					File.Delete(file.FullName);
 				});
 

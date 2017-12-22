@@ -133,8 +133,8 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			this.UrlPattern = string.IsNullOrWhiteSpace(this.Category)
 				? null
 				: string.IsNullOrWhiteSpace(this.Char)
-					? "http://isach.info/mobile/story.php?list=story&category={0}&order=created_date&page={1}"
-					: "http://isach.info/mobile/story.php?list=story&category={0}&order=created_date&char={1}&page={2}";
+					? "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&page={1}"
+					: "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&char={1}&page={2}";
 
 			this.UrlParameters = new List<string>();
 			if (!string.IsNullOrWhiteSpace(this.Category))

@@ -148,7 +148,7 @@ namespace net.vieapps.Services.Books
 		#region Working with files
 		internal void Load(string path, string filename, bool seperatedByFirstChar = false)
 		{
-			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + @"\") + filename;
+			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + Path.DirectorySeparatorChar.ToString()) + filename;
 
 			if (seperatedByFirstChar)
 				Utility.Chars.ForEach(@char =>
@@ -173,7 +173,7 @@ namespace net.vieapps.Services.Books
 
 		internal void Save(string path, string filename, bool seperatedByFirstChar = false)
 		{
-			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + @"\") + filename;
+			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + Path.DirectorySeparatorChar.ToString()) + filename;
 
 			if (seperatedByFirstChar)
 				Utility.Chars.ForEach(@char =>

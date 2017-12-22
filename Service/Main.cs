@@ -50,11 +50,11 @@ namespace net.vieapps.Services.Books
 					try
 					{
 						this.CreateFolder(Utility.FolderOfDataFiles, false);
-						Utility.Chars.ForEach(@char => this.CreateFolder(Utility.FolderOfDataFiles + @"\" + @char.ToLower()));
+						Utility.Chars.ForEach(@char => this.CreateFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
 						this.CreateFolder(Utility.FolderOfStatisticFiles, false);
 						this.CreateFolder(Utility.FolderOfContributedFiles, false);
-						this.CreateFolder(Utility.FolderOfContributedFiles + @"\users");
-						this.CreateFolder(Utility.FolderOfContributedFiles + @"\crawlers");
+						this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
+						this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
 						this.CreateFolder(Utility.FolderOfTempFiles);
 						this.CreateFolder(Utility.FolderOfTrashFiles);
 					}
@@ -84,8 +84,8 @@ namespace net.vieapps.Services.Books
 			if (!Directory.Exists(path))
 				Directory.CreateDirectory(path);
 
-			if (mediaFolders && !Directory.Exists(path + @"\" + Definitions.MediaFolder))
-				Directory.CreateDirectory(path + @"\" + Definitions.MediaFolder);
+			if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
+				Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
 		}
 		#endregion
 
@@ -415,16 +415,17 @@ namespace net.vieapps.Services.Books
 				return;
 
 			var filename = UtilityService.GetNormalizedFilename(book.Name) + ".json";
-			if (File.Exists(Utility.FolderOfTempFiles + @"\" + filename))
+			var filepath = Path.Combine(Utility.FolderOfTempFiles, filename);
+			if (File.Exists(filepath))
 				return;
 
 			// prepare
-			if (File.Exists(book.GetFolderPath() + @"\" + filename))
-				File.Copy(book.GetFolderPath() + @"\" + filename, Utility.FolderOfTempFiles + @"\" + filename, true);
+			if (File.Exists(Path.Combine(book.GetFolderPath(), filename)))
+				File.Copy(Path.Combine(book.GetFolderPath(), filename), filepath, true);
 			else
-				await UtilityService.WriteTextFileAsync(Utility.FolderOfTempFiles + @"\" + filename, book.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
+				await UtilityService.WriteTextFileAsync(filepath, book.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 
-			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(Utility.FolderOfTempFiles + @"\" + filename).ConfigureAwait(false));
+			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(filepath).ConfigureAwait(false));
 			var sourceUrl = json["SourceUrl"] != null
 				? (json["SourceUrl"] as JValue).Value.ToString()
 				: json["SourceUri"] != null
@@ -478,8 +479,8 @@ namespace net.vieapps.Services.Books
 				await this.WriteLogAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
 
 			// cleanup
-			if (File.Exists(Utility.FolderOfTempFiles + @"\" + filename))
-				File.Delete(Utility.FolderOfTempFiles + @"\" + filename);
+			if (File.Exists(filepath))
+				File.Delete(filepath);
 		}
 		#endregion
 
@@ -826,7 +827,7 @@ namespace net.vieapps.Services.Books
 		async Task GenerateFilesAsync(Book book)
 		{
 			// prepare
-			var filePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name);
+			var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name));
 			var flag = "Files-" + filePath.ToLower().GetMD5();
 			if (await Utility.Cache.ExistsAsync(flag).ConfigureAwait(false))
 				return;
@@ -1084,7 +1085,7 @@ namespace net.vieapps.Services.Books
 				}
 
 				// save into file on disc
-				var filePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".epub";
+				var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
 				epub.Generate(filePath);
 
 				try

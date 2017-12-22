@@ -195,12 +195,12 @@ namespace net.vieapps.Services.Books
 		#region Working with folders & files
 		public static string GetFolderPathOfBook(string name)
 		{
-			return Utility.FolderOfDataFiles + (string.IsNullOrWhiteSpace(name) ? "" : @"\" + name.GetFirstChar().ToLower());
+			return Utility.FolderOfDataFiles + (string.IsNullOrWhiteSpace(name) ? "" : Path.DirectorySeparatorChar.ToString() + name.GetFirstChar().ToLower());
 		}
 
 		public static string GetFilePathOfBook(string name)
 		{
-			return Utility.GetFolderPathOfBook(name) + @"\" + UtilityService.GetNormalizedFilename(name);
+			return Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name));
 		}
 
 		public static string GetFilePathOfBook(string title, string author)
@@ -215,8 +215,16 @@ namespace net.vieapps.Services.Books
 
 		public static string GetMediaFilePathOfBook(string uri, string name, string identifier)
 		{
-			var path = Utility.GetFolderPathOfBook(name) + @"\" + Definitions.MediaFolder + @"\" + identifier + "-";
+			var path = Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-");
 			return uri.Replace(Definitions.MediaUri, path);
+		}
+
+		public static string GetMediaFilePath(this Book book)
+		{
+			return Path.Combine(book.GetFolderPath(), Definitions.MediaFolder) + Path.DirectorySeparatorChar.ToString()
+				+ (book != null
+					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
+					: "no-media-file".Url64Encode() + "/no/cover/image.png");
 		}
 		#endregion
 
@@ -284,14 +292,6 @@ namespace net.vieapps.Services.Books
 				: content.Replace(Definitions.MediaUri, book.GetMediaFileUri());
 		}
 
-		public static string GetMediaFilePath(this Book book)
-		{
-			return book.GetFolderPath() + @"\" + Definitions.MediaFolder + @"\"
-				+ (book != null
-					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
-					: "no-media-file".Url64Encode() + "/no/cover/image.png");
-		}
-
 		public static string NormalizeMediaFilePaths(this string content, Book book)
 		{
 			return string.IsNullOrWhiteSpace(content)
@@ -328,9 +328,9 @@ namespace net.vieapps.Services.Books
 
 		internal static bool IsExisted(string name)
 		{
-			var isExisted = File.Exists(Utility.GetFolderPathOfBook(name) + @"\" + UtilityService.GetNormalizedFilename(name) + ".json");
+			var isExisted = File.Exists(Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name) + ".json"));
 			if (!isExisted)
-				isExisted = File.Exists(Utility.FolderOfTrashFiles + @"\" + UtilityService.GetNormalizedFilename(name) + ".json");
+				isExisted = File.Exists(Path.Combine(Utility.FolderOfTrashFiles, UtilityService.GetNormalizedFilename(name) + ".json"));
 			return isExisted;
 		}
 
