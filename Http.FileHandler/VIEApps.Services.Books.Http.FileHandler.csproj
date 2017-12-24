@@ -55,10 +55,5 @@
       <Name>VIEApps.Services.Books</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="VIEApps.Components.Utility.AspNet">
-      <Version>10.1.3.1712</Version>
-    </PackageReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
