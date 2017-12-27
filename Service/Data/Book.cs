@@ -37,6 +37,7 @@ namespace net.vieapps.Services.Books
 			this.Source = "";
 			this.SourceUrl = "";
 			this.Contributor = "";
+			this.Credits = "";
 			this.TotalChapters = 0;
 			this.LastUpdated = DateTime.Now;
 			this.Counters = new List<CounterInfo>()
@@ -126,6 +127,9 @@ namespace net.vieapps.Services.Books
 				return this._PermanentID;
 			}
 		}
+
+		[JsonIgnore, BsonIgnore, Ignore]
+		public string Credits { get; set; }
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public string Stylesheet { get; set; }

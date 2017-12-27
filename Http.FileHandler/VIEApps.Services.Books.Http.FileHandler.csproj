@@ -38,6 +38,10 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Base.AspNet\VIEApps.Services.Base.AspNet.csproj">
+      <Project>{8343012e-ee41-4894-8024-a2d467402ca1}</Project>
+      <Name>VIEApps.Services.Base.AspNet</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Base\VIEApps.Services.Base.csproj">
       <Project>{c496cef5-9ff8-4364-9860-fcdefed4e277}</Project>
       <Name>VIEApps.Services.Base</Name>

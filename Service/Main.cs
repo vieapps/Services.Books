@@ -96,10 +96,7 @@ namespace net.vieapps.Services.Books
 			// track
 			var stopwatch = new Stopwatch();
 			stopwatch.Start();
-			var uri = $"[{requestInfo.Verb}]: /{this.ServiceName}";
-			if (!string.IsNullOrWhiteSpace(requestInfo.ObjectName))
-				uri += requestInfo.ObjectName + "/" + (requestInfo.GetObjectIdentity() ?? "");
-			var logs = new List<string>() { $"Process the request {uri}" };
+			var logs = new List<string>() { $"Begin process ({requestInfo.Verb}): {requestInfo.URI}" };
 #if DEBUG || REQUESTLOGS
 			logs.Add($"Request ==> {requestInfo.ToJson().ToString(Formatting.Indented)}");
 #endif
@@ -124,8 +121,12 @@ namespace net.vieapps.Services.Books
 
 					case "bookmarks":
 						return await this.ProcessBookmarksAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+
+					case "crawl":
+						var crawltask = Task.Run(async () => await this.CrawlBookAsync(requestInfo).ConfigureAwait(false)).ConfigureAwait(false);
+						return new JObject();
 				}
-				throw new InvalidRequestException("The request is invalid [" + this.ServiceURI + "]: " + uri);
+				throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
 			}
 			catch (Exception ex)
 			{
@@ -135,7 +136,7 @@ namespace net.vieapps.Services.Books
 			finally
 			{
 				stopwatch.Stop();
-				await this.WriteLogAsync(requestInfo.CorrelationID, $"The request is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
+				await this.WriteLogAsync(requestInfo.CorrelationID, $"End process - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 			}
 		}
 
@@ -159,6 +160,12 @@ namespace net.vieapps.Services.Books
 
 				case "POST":
 					return this.CreateBookAsync(requestInfo, cancellationToken);
+
+				case "PUT":
+					return this.UpdateBookAsync(requestInfo, cancellationToken);
+
+				case "DELETE":
+					return this.DeleteBookAsync(requestInfo, cancellationToken);
 			}
 
 			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
@@ -301,21 +308,28 @@ namespace net.vieapps.Services.Books
 
 			// load from JSON file if has no chapter
 			Book bookJson = null;
-			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
+			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || "brief-info".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
 				var keyJson = id.GetCacheKey<Book>() + "-json";
 				bookJson = await Utility.Cache.GetAsync<Book>(keyJson).ConfigureAwait(false);
 				if (bookJson == null)
 				{
 					bookJson = book.Clone();
-					var jsonFilePath = book.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(book.Name) + ".json";
+					var jsonFilePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json");
 					if (File.Exists(jsonFilePath))
 					{
 						bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath).ConfigureAwait(false)));
 						await Utility.Cache.SetAsFragmentsAsync(keyJson, bookJson).ConfigureAwait(false);
+
 						if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
 						{
 							book.SourceUrl = bookJson.SourceUrl;
+							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+						}
+
+						if (!book.TotalChapters.Equals(bookJson.Chapters.Count))
+						{
+							book.TotalChapters = bookJson.Chapters.Count;
 							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 						}
 					}
@@ -359,6 +373,17 @@ namespace net.vieapps.Services.Books
 				};
 			}
 
+			// brief information
+			else if ("brief-info".IsEquals(objectIdentity))
+				return new JObject()
+				{
+					{ "ID", bookJson.ID },
+					{ "PermanentID", bookJson.PermanentID },
+					{ "Title", bookJson.Title },
+					{ "Author", bookJson.Author },
+					{ "Category", bookJson.Category }
+				};
+
 			// generate files
 			else if ("files".IsEquals(objectIdentity))
 				return this.GenerateFiles(book);
@@ -366,24 +391,24 @@ namespace net.vieapps.Services.Books
 			// re-crawl
 			else if ("recrawl".IsEquals(objectIdentity))
 			{
-				var recrawl = Task.Run(async () => await this.ReCrawlBookAsync(book).ConfigureAwait(false));
+				var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
+				var fullRecrawl = requestInfo.Query.ContainsKey("full") && "true".IsEquals(requestInfo.Query["full"]);
+				var recrawl = Task.Run(async () => await this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl).ConfigureAwait(false)).ConfigureAwait(false);
 				return new JObject();
 			}
 
 			// book information
 			else
-			{
-				// generate
-				var json = book.ToJson();
-
-				// update
-				json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
-				if (book.TotalChapters < 2)
-					json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? bookJson.Chapters[0].NormalizeMediaFileUris(book) : ""));
-
-				// return
-				return json;
-			}
+				return book.ToJson(
+					false,
+					(json) =>
+					{
+						json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
+						if (book.TotalChapters < 2)
+							json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? bookJson.Chapters[0].NormalizeMediaFileUris(book) : ""));
+					},
+					true
+				);
 		}
 
 		async Task<JObject> UpdateCounterAsync(Book book, string action, CancellationToken cancellationToken = default(CancellationToken))
@@ -408,8 +433,272 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Re-crawl a book
-		async Task ReCrawlBookAsync(Book book)
+		#region Update a book
+		async Task<JObject> UpdateBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			// check permissions
+			if (!await this.IsAuthorizedAsync(
+				requestInfo,
+				Components.Security.Action.Update,
+				null,
+				(user, privileges) => this.GetPrivileges(user, privileges),
+				(role) => this.GetPrivilegeActions(role)
+			).ConfigureAwait(false))
+				throw new AccessDeniedException();
+
+			// prepare
+			var book = await Book.GetAsync<Book>(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
+			if (book == null)
+				throw new InformationNotFoundException();
+
+			// update information
+			var category = book.Category;
+			var author = book.Author;
+			var body = requestInfo.GetBodyExpando();
+			var tocs = body.Get("TOCs", "").Replace("\t", "").Replace("\r", "").Trim().ToArray("\n");
+
+			book.CopyFrom(body, "ID,TOCs,Cover".ToHashSet());
+			book.LastUpdated = DateTime.Now;
+
+			// update JSON file
+			var cacheKey = book.GetCacheKey() + "-json";
+			var bookJson = await Utility.Cache.GetAsync<Book>(cacheKey).ConfigureAwait(false);
+			if (bookJson == null && File.Exists(Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json")))
+			{
+				bookJson = book.Clone();
+				bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json")).ConfigureAwait(false)));
+			}
+
+			if (bookJson != null)
+			{
+				bookJson.Title = book.Title;
+				bookJson.Original = book.Original;
+				bookJson.Author = book.Author;
+				bookJson.Publisher = book.Publisher;
+				bookJson.Producer = book.Producer;
+				bookJson.Category = book.Category;
+
+				// update TOCs
+				if (tocs.Length.Equals(bookJson.TOCs.Count))
+					bookJson.TOCs = tocs.ToList();
+				else
+					tocs = bookJson.TOCs.ToArray();
+
+				// update cover image
+				var cover = body.Get("Cover", "");
+				if (!string.IsNullOrWhiteSpace(cover) && cover.IsStartsWith(Definitions.MediaUri) && !cover.IsEquals(book.Cover))
+				{
+					if (!string.IsNullOrWhiteSpace(book.Cover) && book.Cover.IsStartsWith(Definitions.MediaUri))
+					{
+						var oldCover = book.Cover.Replace(Definitions.MediaUri, bookJson.PermanentID + "-");
+						if (File.Exists(Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, oldCover)))
+							File.Move(Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, oldCover), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder, oldCover));
+					}
+					bookJson.Cover = book.Cover = cover;
+				}
+
+				// update JSON file
+				var path = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name));
+				await Task.WhenAll(
+					UtilityService.WriteTextFileAsync(path + ".json", bookJson.ToJson(
+						false,
+						(json) =>
+						{
+							json.Remove("Counters");
+							json.Remove("RatingPoints");
+							json.Remove("LastUpdated");
+							json.Add(new JProperty("PermanentID", bookJson.PermanentID));
+							json.Add(new JProperty("Credits", bookJson.Credits));
+							json.Add(new JProperty("Stylesheet", bookJson.Stylesheet));
+							json.Add(new JProperty("TOCs", bookJson.TOCs.ToJArray()));
+							json.Add(new JProperty("Chapters", bookJson.Chapters.ToJArray()));
+						},
+						false).ToString(Formatting.Indented)),
+					Utility.Cache.SetAsync(cacheKey, bookJson)
+				).ConfigureAwait(false);
+
+				// delete old e-book files
+				if (File.Exists(path + ".epub"))
+					File.Delete(path + ".epub");
+
+				if (File.Exists(path + ".mobi"))
+					File.Delete(path + ".mobi");
+			}
+			else
+				tocs = book.TOCs.ToArray();
+
+			// update database
+			await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+
+			// update statistics
+			if (!category.IsEquals(book.Category))
+			{
+				var statistic = Utility.Categories[category];
+				if (statistic != null)
+					statistic.Counters--;
+				statistic = Utility.Categories[book.Category];
+				if (statistic != null)
+					statistic.Counters++;
+			}
+			if (!author.IsEquals(book.Author))
+			{
+				var statistic = Utility.Authors[author];
+				if (statistic != null)
+					statistic.Counters--;
+				statistic = Utility.Authors[book.Author];
+				if (statistic != null)
+					statistic.Counters++;
+			}
+
+			// clear related cached & send update message
+			await Task.WhenAll(
+				this.ClearRelatedCacheAsync(book, !category.IsEquals(book.Category) ? category : null, !author.IsEquals(book.Author) ? author : null),
+				this.SendUpdateMessageAsync(new UpdateMessage()
+				{
+					Type = "Books#Book",
+					DeviceID = "*",
+					Data = book.ToJson(false, (json) => json["TOCs"] = tocs.ToJArray())
+				}, cancellationToken)
+			).ConfigureAwait(false);
+
+			// return
+			return new JObject();
+		}
+		#endregion
+
+		#region Delete a book
+		async Task<JObject> DeleteBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			// check permissions
+			if (!await this.IsAuthorizedAsync(
+				requestInfo,
+				Components.Security.Action.Delete,
+				null,
+				(user, privileges) => this.GetPrivileges(user, privileges),
+				(role) => this.GetPrivilegeActions(role)
+			).ConfigureAwait(false))
+				throw new AccessDeniedException();
+
+			// prepare
+			var book = await Book.GetAsync<Book>(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
+			if (book == null)
+				throw new InformationNotFoundException();
+
+			var path = book.GetFolderPath();
+			var filename = UtilityService.GetNormalizedFilename(book.Title + " - " + book.Author);
+			var keyJson = book.GetCacheKey() + "-json";
+			var bookJson = await Utility.Cache.GetAsync<Book>(keyJson).ConfigureAwait(false);
+			if (bookJson == null)
+			{
+				bookJson = book.Clone();
+				if (File.Exists(Path.Combine(path, filename + ".json")))
+					bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(path, filename + ".json")).ConfigureAwait(false)));
+			}
+
+			// move files
+			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
+			if (!string.IsNullOrWhiteSpace(bookJson.PermanentID))
+				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaFolder), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder), bookJson.PermanentID + "-*.*", true);
+
+			// delete from database
+			await Book.DeleteAsync<Book>(book.ID, cancellationToken).ConfigureAwait(false);
+
+			// clear related cached & send update message
+			await Task.WhenAll(
+				this.ClearRelatedCacheAsync(book),
+				this.UpdateStatiscticsAsync(book, true, cancellationToken),
+				this.SendUpdateMessageAsync(new UpdateMessage()
+				{
+					Type = "Books#Book#Delete",
+					DeviceID = "*",
+					Data = new JObject()
+					{
+						{ "ID", book.ID },
+						{ "Category", book.Category },
+						{ "Author", book.Author }
+					}
+				}, cancellationToken)
+			).ConfigureAwait(false);
+
+			// return
+			return new JObject();
+		}
+		#endregion
+
+		#region Crawl a book
+		async Task CrawlBookAsync(RequestInfo requestInfo)
+		{
+			// check permissions
+			if (!await this.IsAuthorizedAsync(
+				requestInfo.Session.User,
+				requestInfo.ServiceName,
+				"book",
+				null,
+				Components.Security.Action.Create,
+				null,
+				(user, privileges) => this.GetPrivileges(user, privileges),
+				(role) => this.GetPrivilegeActions(role)
+			).ConfigureAwait(false))
+				throw new AccessDeniedException();
+
+			// prepare
+			var correlationID = UtilityService.NewUID;
+			var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
+			var parser = string.IsNullOrWhiteSpace(sourceUrl)
+				? null
+				: sourceUrl.IsStartsWith("http://vnthuquan.net")
+					? new Parsers.Books.VnThuQuan() as IBookParser
+					: sourceUrl.IsStartsWith("http://isach.info")
+						? new Parsers.Books.ISach() as IBookParser
+						: null;
+
+			if (parser == null)
+			{
+				await this.WriteLogAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
+				return;
+			}
+
+			// crawl
+			parser.SourceUrl = sourceUrl;
+			parser.Contributor = requestInfo.Query.ContainsKey("contributor") ? requestInfo.Query["contributor"] : "";
+			try
+			{
+				var crawler = new Crawler()
+				{
+					CorrelationID = correlationID,
+					UpdateLogs = (log, ex, updateCentralizedLogs) =>
+					{
+						this.WriteLog(correlationID, log, ex, updateCentralizedLogs);
+					}
+				};
+
+				await crawler.CrawlAsync(
+					parser,
+					Utility.FolderOfTempFiles,
+					async (book, token) =>
+					{
+						await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false);
+					},
+					parser is Parsers.Books.ISach
+						? UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>()
+						: UtilityService.GetAppSetting("BookCrawlVnThuQuanParalell", "true").CastAs<bool>(),
+					this.CancellationTokenSource.Token
+				).ConfigureAwait(false);
+
+				await this.WriteLogAsync(crawler.CorrelationID, this.ServiceName, "Crawlers",
+					$"The crawler is completed [{parser.Title}]" + "\r\n" +
+					"--------------------------------------------------------------" + "\r\n" +
+					string.Join("\r\n", crawler.Logs) + "\r\n"
+					+ "--------------------------------------------------------------"
+				);
+			}
+			catch (Exception ex)
+			{
+				await this.WriteLogAsync(correlationID, $"Error occurred while crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
+			}
+		}
+
+		async Task ReCrawlBookAsync(Book book, string sourceUrl = null, bool fullRecrawl = false)
 		{
 			// check
 			if (book == null)
@@ -427,13 +716,14 @@ namespace net.vieapps.Services.Books
 				await UtilityService.WriteTextFileAsync(filepath, book.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 
 			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(filepath).ConfigureAwait(false));
-			var sourceUrl = json["SourceUrl"] != null
-				? (json["SourceUrl"] as JValue).Value.ToString()
-				: json["SourceUri"] != null
-					? (json["SourceUri"] as JValue).Value.ToString()
-					: null;
+			if (string.IsNullOrWhiteSpace(sourceUrl))
+				sourceUrl = json["SourceUrl"] != null
+					? (json["SourceUrl"] as JValue).Value.ToString()
+					: json["SourceUri"] != null
+						? (json["SourceUri"] as JValue).Value.ToString()
+						: null;
 
-			var parser = sourceUrl == null
+			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
 				: sourceUrl.IsStartsWith("http://vnthuquan.net")
 					? json.Copy<Parsers.Books.VnThuQuan>() as IBookParser
@@ -446,19 +736,40 @@ namespace net.vieapps.Services.Books
 			if (parser != null)
 				try
 				{
-					// re-parse the book
-					if (parser.TOCs == null || parser.TOCs.Count < 1 || parser.TOCs[0].Equals(""))
-						await parser.ParseAsync().ConfigureAwait(false);
+					// assign source url
+					if (string.IsNullOrWhiteSpace(parser.SourceUrl))
+						parser.SourceUrl = sourceUrl;
 
-					// fetch the missing chapters
-					await new Crawler()
+					// full re-crawl
+					if (fullRecrawl)
+					{
+						parser.Original = null;
+						parser.Credits = null;
+						parser.Translator = null;
+						parser.Cover = null;
+						parser.TOCs = new List<string>();
+						parser.Chapters = new List<string>();
+					}
+
+					// re-parse the book
+					else if (parser.TOCs == null || parser.TOCs.Count < 1 || parser.TOCs[0].Equals(""))
+					{
+						await parser.ParseAsync().ConfigureAwait(false);
+						if (string.IsNullOrWhiteSpace(parser.PermanentID) || !parser.PermanentID.IsValidUUID())
+							parser.PermanentID = (parser.Title + " - " + parser.Author).Trim().ToLower().GetMD5();
+					}
+
+					// fetch
+					var crawler = new Crawler()
 					{
 						CorrelationID = correlationID,
 						UpdateLogs = (log, ex, updateCentralizedLogs) =>
 						{
 							this.WriteLog(correlationID, log, ex, updateCentralizedLogs);
 						}
-					}.CrawlAsync(
+					};
+
+					await crawler.CrawlAsync(
 						parser,
 						Utility.FolderOfTempFiles,
 						async (b, token) =>
@@ -469,8 +780,15 @@ namespace net.vieapps.Services.Books
 							? UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>()
 							: UtilityService.GetAppSetting("BookCrawlVnThuQuanParalell", "true").CastAs<bool>(),
 						this.CancellationTokenSource.Token,
-						true
+						fullRecrawl ? false : true
 					).ConfigureAwait(false);
+
+					await this.WriteLogAsync(crawler.CorrelationID, this.ServiceName, "Crawlers",
+						$"The crawler is completed to re-crawl the book [{parser.Title}]" + "\r\n" +
+						"--------------------------------------------------------------" + "\r\n" +
+						string.Join("\r\n", crawler.Logs) + "\r\n"
+						+ "--------------------------------------------------------------"
+					);
 				}
 				catch (Exception ex)
 				{
@@ -602,7 +920,7 @@ namespace net.vieapps.Services.Books
 			// authors
 			Utility.Authors.Clear();
 			var totalRecords = await Book.CountAsync(null, null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
-			var totalPages = (new Tuple<long, int>(totalRecords, 100)).GetTotalPages();
+			var totalPages = new Tuple<long, int>(totalRecords, 100).GetTotalPages();
 			var pageNumber = 0;
 			while (pageNumber < totalPages)
 			{
@@ -620,6 +938,7 @@ namespace net.vieapps.Services.Books
 								Counters = 1
 							});
 					});
+				await Task.Delay(UtilityService.GetRandomNumber(123, 234)).ConfigureAwait(false);
 			}
 
 			// status
@@ -1385,16 +1704,13 @@ namespace net.vieapps.Services.Books
 					};
 
 					await (await this.GetSessionsAsync(requestInfo).ConfigureAwait(false))
-						.Where(s => s.Item4)
-						.ForEachAsync(async (session, token) =>
+						.Where(session => session.Item4)
+						.ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage()
 						{
-							await this.SendUpdateMessageAsync(new UpdateMessage()
-							{
-								Type = "Books#Bookmarks",
-								DeviceID = session.Item2,
-								Data = data
-							}, token).ConfigureAwait(false);
-						}, cancellationToken).ConfigureAwait(false);
+							Type = "Books#Bookmarks",
+							DeviceID = session.Item2,
+							Data = data
+						}, token), cancellationToken).ConfigureAwait(false);
 
 					return data;
 			}
@@ -1574,37 +1890,49 @@ namespace net.vieapps.Services.Books
 					{
 						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
 					}
-				});
+				}).ConfigureAwait(false);
 		}
 		#endregion
 
 		#region Update book & statistics when related information are changed
 		async Task OnBookUpdatedAsync(Book book, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			// clear related cached
+			// clear related cached & send update message
+			await Task.WhenAll(
+				this.ClearRelatedCacheAsync(book),
+				this.SendUpdateMessageAsync(new UpdateMessage()
+				{
+					Type = "Books#Book",
+					DeviceID = "*",
+					Data = book.ToJson(false, (json) => json["TOCs"] = book.TOCs.ToJArray())
+				}, cancellationToken)
+			).ConfigureAwait(false);
+		}
+
+		async Task ClearRelatedCacheAsync(Book book, string category = null, string author = null)
+		{
 			try
 			{
 				var filter = Filters<Book>.NotEquals("Status", "Inactive");
 				var sort = Sorts<Book>.Descending("LastUpdated");
+
 				await Task.WhenAll(
 					Utility.Cache.RemoveAsync(book.GetCacheKey() + "-json"),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, filter, sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
 				).ConfigureAwait(false);
+
+				if (!string.IsNullOrWhiteSpace(category))
+					await this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", category), filter), sort).ConfigureAwait(false);
+
+				if (!string.IsNullOrWhiteSpace(author))
+					await this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", author), filter), sort).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
 				await this.WriteLogAsync(UtilityService.NewUID, $"Error occurred while clearing related cached of a book [{book.Title}]", ex).ConfigureAwait(false);
 			}
-
-			// send update message
-			await this.SendUpdateMessageAsync(new UpdateMessage()
-			{
-				Type = "Books#Book",
-				DeviceID = "*",
-				Data = book.ToJson()
-			}, cancellationToken).ConfigureAwait(false);
 		}
 
 		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))

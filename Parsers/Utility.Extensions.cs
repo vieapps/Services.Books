@@ -153,7 +153,8 @@ namespace net.vieapps.Services.Books
 			{
 				if (UtilityExtensions._NormalizedCategories == null)
 				{
-					var categories = @"
+					UtilityExtensions._NormalizedCategories = new Dictionary<string, string>();
+					@"
 					truyện dài|Tiểu Thuyết
 					Bài viết|Khác
 					Khoa học|Khoa Học - Công Nghệ
@@ -182,14 +183,13 @@ namespace net.vieapps.Services.Books
 					Tài Chính|Kinh Tế - Tài Chính
 					Làm Giàu|Kinh Doanh - Quản Trị
 					Tuổi Học Trò|Tuổi Hoa
-					Tùy Bút|Tuỳ Bút - Tạp Văn".Replace("\t", "").Replace("\r", "").Trim().Split("\n".ToCharArray());
-
-					UtilityExtensions._NormalizedCategories = new Dictionary<string, string>();
-					categories.ForEach(cat =>
-					{
-						var catInfo = cat.Split('|');
-						catInfo[0].ToArray().ForEach(c => UtilityExtensions._NormalizedCategories[c.ToLower()] = catInfo[1]);
-					});
+					Tùy Bút|Tuỳ Bút - Tạp Văn".Replace("\t", "").Replace("\r", "").Trim()
+						.ToArray("\n")
+						.ForEach(cat =>
+						{
+							var catInfo = cat.Split('|');
+							UtilityExtensions._NormalizedCategories[catInfo[0].ToLower()] = catInfo[1];
+						});
 					UtilityExtensions.DefaultCategories.ForEach(c => UtilityExtensions._NormalizedCategories[c.ToLower()] = c);
 				}
 				return UtilityExtensions._NormalizedCategories;
@@ -211,10 +211,9 @@ namespace net.vieapps.Services.Books
 		{
 			var result
 				= string.IsNullOrWhiteSpace(author)
-					|| author.IsStartsWith("không rõ") || author.IsStartsWith("không xác định")
-					|| author.IsStartsWith("sưu tầm") || author.Equals("vô danh")
-					|| author.IsStartsWith("truyện ma") || author.IsStartsWith("kiếm hiệp")
-					|| author.IsStartsWith("dân gian") || author.IsStartsWith("cổ tích")
+					|| author.IsStartsWith("không rõ") || author.IsStartsWith("không xác định") || author.IsStartsWith("chưa biết") || author.Equals("vô danh")
+					|| author.IsStartsWith("sưu tầm") || author.IsStartsWith("truyện ma") || author.IsStartsWith("kiếm hiệp")
+					|| author.IsStartsWith("dân gian") || author.IsStartsWith("cổ tích") || author.IsEquals("n/a") || author.IsEquals("xxx")
 				? "Khuyết Danh"
 				: author.GetNormalized();
 
@@ -233,7 +232,7 @@ namespace net.vieapps.Services.Books
 
 		public static string GetAuthorName(this string author)
 		{
-			var start = author.IndexOf(",");
+			var start = author.PositionOf(",");
 			if (start > 0)
 				return author.Substring(0, start);
 
@@ -245,22 +244,48 @@ namespace net.vieapps.Services.Books
 				while (start > -1)
 				{
 					name = name.Remove(start).Trim();
-					start = name.IndexOf(indicator);
+					start = name.PositionOf(indicator);
 				}
 			}
 
 			indicators = new List<string>() { ".", " ", "-" };
 			foreach (var indicator in indicators)
 			{
-				start = name.IndexOf(indicator);
+				start = name.PositionOf(indicator);
 				while (start > -1)
 				{
 					name = name.Remove(0, start + indicator.Length).Trim();
-					start = name.IndexOf(indicator);
+					start = name.PositionOf(indicator);
 				}
 			}
 
 			return name;
+		}
+		#endregion
+
+		#region Normalize TOC
+		public static void NormalizeTOC(this IBookParser parser)
+		{
+			if (parser.Chapters == null || parser.Chapters.Count < 2)
+				return;
+
+			var tocs = new List<string>();
+
+			parser.Chapters.ForEach((chapter, index) =>
+			{
+				string title = null;
+				if (chapter.IsStartsWith("<h1>"))
+				{
+					var pos = chapter.PositionOf("</h1>");
+					title = (pos > 0 ? chapter.Substring(4, pos - 4) : "").Trim();
+				}
+				if (title == null && parser.TOCs != null && parser.TOCs.Count > index)
+					tocs.Add(!string.IsNullOrWhiteSpace(parser.TOCs[index]) ? parser.TOCs[index] : (index + 1).ToString() + ".");
+				else
+					tocs.Add(!string.IsNullOrWhiteSpace(title) ? title : (index + 1).ToString() + ".");
+			});
+
+			parser.TOCs = tocs;
 		}
 		#endregion
 

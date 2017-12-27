@@ -260,7 +260,7 @@ namespace net.vieapps.Services.Books
 				(idx, ex) => this.AddLogs($"Error occurred while fetching the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}]", ex),
 				Path.Combine(folder, Definitions.MediaFolder),
 				(p, uri) => this.AddLogs($"Start to download images [{uri}]"),
-				(uri, path, times) => this.AddLogs($"Image is downloaded [{uri} - {path}] - Execution times: {times.GetElapsedTimes()}"),
+				(uri, path, times) => this.AddLogs($"Image is downloaded [{uri}] - Execution times: {times.GetElapsedTimes()}"),
 				(uri, ex) => this.AddLogs($"Error occurred while downloading image file [{uri}]", ex),
 				parallelExecutions,
 				cancellationToken

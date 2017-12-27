@@ -155,12 +155,12 @@ namespace net.vieapps.Services.Books
 
 		public static string GetFirstChar(this string @string, bool userLower = true)
 		{
-			string result = UtilityService.GetNormalizedFilename(@string).ConvertUnicodeToANSI().Trim();
+			var result = UtilityService.GetNormalizedFilename(@string).ConvertUnicodeToANSI().Trim();
 			if (string.IsNullOrWhiteSpace(result))
 				return "0";
 
-			string[] specials = new string[] { "-", ".", "'", "+", "&", "“", "”" };
-			foreach (string special in specials)
+			var specials = new string[] { "-", ".", "'", "+", "&", "“", "”" };
+			foreach (var special in specials)
 			{
 				while (result.StartsWith(special))
 					result = result.Right(result.Length - 1).Trim();
@@ -170,17 +170,17 @@ namespace net.vieapps.Services.Books
 			if (string.IsNullOrWhiteSpace(result))
 				return "0";
 
-			int index = 0;
-			bool isCorrect = false;
+			var index = 0;
+			var isCorrect = false;
 			while (!isCorrect && index < result.Length)
 			{
-				char @char = result.ToUpper()[index];
+				var @char = result.ToUpper()[index];
 				isCorrect = (@char >= '0' && @char <= '9') || (@char >= 'A' && @char <= 'Z');
 				if (!isCorrect)
 					index++;
 			}
 
-			char firstChar = index < result.Length
+			var firstChar = index < result.Length
 				? result[index]
 				: '0';
 
@@ -226,24 +226,10 @@ namespace net.vieapps.Services.Books
 					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
 					: "no-media-file".Url64Encode() + "/no/cover/image.png");
 		}
-		#endregion
 
-		#region Working with file (file size, get data of JSON file, ...)
 		public static string GetFileSize(string filePath)
 		{
-			var fileInfo = new FileInfo(filePath);
-			if (!fileInfo.Exists)
-				return "generating...";
-
-			var fileSize = fileInfo.Length.CastAs<double>();
-			var size = fileSize / (1024 * 1024);
-			if (size >= 1.0d)
-				return size.ToString("##0.##") + " M";
-			else
-			{
-				size = fileSize / 1024;
-				return size.ToString("##0.##") + " " + (size >= 1.0d ? "K" : "B");
-			}
+			return UtilityService.GetFileSize(filePath) ?? "generating...";
 		}
 
 		public static string GetDataOfJson(string json, string attribute)

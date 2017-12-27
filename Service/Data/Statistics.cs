@@ -154,17 +154,14 @@ namespace net.vieapps.Services.Books
 				Utility.Chars.ForEach(@char =>
 				{
 					if (File.Exists(string.Format(filePath, @char)))
-						UtilityService.ReadTextFile(String.Format(filePath, @char)).FromJson<List<StatisticInfo>>().ForEach(item =>
-						{
-							var info = new StatisticInfo()
+						UtilityService.ReadTextFile(string.Format(filePath, @char))
+							.FromJson<List<StatisticInfo>>()
+							.ForEach(item => this.List.Add(new StatisticInfo()
 							{
 								Name = item.Name,
 								Counters = item.Counters,
 								FirstChar = item.Name.GetAuthorName().GetFirstChar().ToUpper()
-							};
-
-							this.List.Add(info);
-						});
+							}));
 				});
 
 			else if (File.Exists(filePath))
@@ -179,8 +176,7 @@ namespace net.vieapps.Services.Books
 				Utility.Chars.ForEach(@char =>
 				{
 					var list = this.Find(@char);
-					if (list != null)
-						UtilityService.WriteTextFile(string.Format(filePath, @char), list.ToJArray().ToString(Formatting.Indented));
+					UtilityService.WriteTextFile(string.Format(filePath, @char), (list?.ToJArray() ?? new JArray()).ToString(Formatting.Indented));
 				});
 
 			else

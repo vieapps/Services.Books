@@ -1,16 +1,19 @@
 ﻿#region Related component
 using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Web;
 using System.IO;
 using System.Net;
+using System.Web;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
 using Newtonsoft.Json.Linq;
 
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Security;
+
 using net.vieapps.Services.Files;
+using net.vieapps.Services.Base.AspNet;
 #endregion
 
 namespace net.vieapps.Services.Books
@@ -148,12 +151,12 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Utility.FolderOfDataFiles + Path.DirectorySeparatorChar.ToString() + name.GetFirstChar() + Path.DirectorySeparatorChar.ToString() + UtilityService.GetNormalizedFilename(name) + ext);
+			var fileInfo = new FileInfo(Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar(), UtilityService.GetNormalizedFilename(name) + ext));
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
 			// send inter-communicate message to track logs
-			var message = new CommunicateMessage()
+			await this.SendInterCommunicateMessageAsync(new CommunicateMessage()
 			{
 				ServiceName = "Books",
 				Type = "Download",
@@ -162,8 +165,7 @@ namespace net.vieapps.Services.Books
 					{ "UserID", context.User.Identity.Name },
 					{ "BookID", requestInfo[3].Url64Decode() },
 				}
-			};
-			await this.SendInterCommunicateMessageAsync(message, cancellationToken).ConfigureAwait(false);
+			}, cancellationToken).ConfigureAwait(false);
 
 			// set cache policy
 			context.Response.Cache.SetCacheability(HttpCacheability.Public);
@@ -185,10 +187,50 @@ namespace net.vieapps.Services.Books
 			await context.WriteFileToOutputAsync(fileInfo, "application/" + contentType, eTag, UtilityService.GetNormalizedFilename(name) + ext, cancellationToken).ConfigureAwait(false);
 		}
 
-		Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)
+		async Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException();
-		}
+			// check permissions
+			if (context.User == null || !(context.User is UserPrincipal) || context.User.Identity.Name.Equals(""))
+				throw new AccessDeniedException();
 
+			var id = context.Request.Headers["x-book-id"];
+			if (!await Base.AspNet.Global.CanEditAsync(context.User.Identity as User, "books", "book", id).ConfigureAwait(false))
+				throw new AccessDeniedException();
+
+			// prepare
+			var info = await context.CallServiceAsync("books", "book", "GET", new Dictionary<string, string>()
+			{
+				{ "object-identity", "brief-info" },
+				{ "id", id }
+			}).ConfigureAwait(false);
+
+			var path = Path.Combine(Utility.FolderOfDataFiles, (info["Title"] as JValue).Value.ToString().GetFirstChar(), Definitions.MediaFolder, (info["PermanentID"] as JValue).Value as string + "-");
+			var name = ((info["Title"] as JValue).Value as string + " - " + (info["Author"] as JValue).Value as string + " - " + DateTime.Now.ToIsoString()).GetMD5() + ".png";
+
+			// base64 image
+			if (context.Request.Headers["x-as-base64"] != null)
+			{
+				// parse & write file
+				var data = "";
+				using (var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
+				{
+					var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+					data = body.ToExpandoObject().Get<string>("Data").ToArray().Last();
+				}
+
+				// write to file
+				await UtilityService.ExecuteTask(() => File.WriteAllBytes(path + name, Convert.FromBase64String(data)), cancellationToken).ConfigureAwait(false);
+			}
+
+			// file
+			else
+				await UtilityService.ExecuteTask(() => context.Request.Files[0].SaveAs(path + name), cancellationToken).ConfigureAwait(false);
+
+			// response
+			await context.Response.Output.WriteAsync((new JObject()
+			{
+				{ "Uri", Definitions.MediaUri + name }
+			}).ToString(Newtonsoft.Json.Formatting.None)).ConfigureAwait(false);
+		}
 	}
 }

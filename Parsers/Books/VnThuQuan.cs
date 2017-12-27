@@ -1,5 +1,6 @@
 ﻿#region Related components
 using System;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
@@ -30,6 +31,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Source { get; set; } = "vnthuquan.net";
 		public string SourceUrl { get; set; } = "";
 		public string Credits { get; set; } = "";
+		public string Contributor { get; set; } = "";
+		public string Tags { get; set; } = "";
 		public string Language { get; set; } = "vi";
 		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
@@ -59,7 +62,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 
 				// permanent identity
-				if (string.IsNullOrWhiteSpace(this.PermanentID))
+				if (string.IsNullOrWhiteSpace(this.PermanentID) || !this.PermanentID.IsValidUUID())
 					this.PermanentID = (this.Title + " - " + this.Author).Trim().ToLower().GetMD5();
 
 				// callback when done
@@ -151,8 +154,11 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				folderOfImages = folderOfImages ?? "temp";
 				onStartDownload?.Invoke(this, folderOfImages);
-				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, folderOfImages + @"\" + this.PermanentID + "-" + uri.GetFilename(), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
+				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, Path.Combine(folderOfImages, this.PermanentID + "-" + uri.GetFilename()), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
 			}
+
+			// normalize TOC
+			this.NormalizeTOC();
 
 			// assign identity
 			if (string.IsNullOrWhiteSpace(this.ID) || !this.ID.IsValidUUID())
