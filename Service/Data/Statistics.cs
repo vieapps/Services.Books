@@ -97,7 +97,7 @@ namespace net.vieapps.Services.Books
 				? ""
 				: firstChar.GetFirstChar().ToUpper();
 
-			var list = this.List.Where(item => item.FirstChar.IsEquals(@char));
+			var list = this.List.Where(item => string.IsNullOrWhiteSpace(@char) ? true : item.FirstChar.IsEquals(@char));
 
 			if (!string.IsNullOrWhiteSpace(sortBy))
 			{
@@ -160,7 +160,7 @@ namespace net.vieapps.Services.Books
 							{
 								Name = item.Name,
 								Counters = item.Counters,
-								FirstChar = item.Name.GetAuthorName().GetFirstChar().ToUpper()
+								FirstChar = @char.ToUpper()
 							}));
 				});
 

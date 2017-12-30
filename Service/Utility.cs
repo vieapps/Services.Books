@@ -391,6 +391,58 @@ namespace net.vieapps.Services.Books
 				return Utility._Status;
 			}
 		}
+
+		public static string GetAuthorName(this string author)
+		{
+			var start = author.IndexOf(",");
+			if (start > 0)
+				return author.Substring(0, start).GetAuthorName();
+
+			var name = author.GetNormalized();
+			new List<string>() { "(", "[", "{", "<" }.ForEach(indicator =>
+			{
+				start = name.IndexOf(indicator);
+				while (start > -1)
+				{
+					name = name.Remove(start).Trim();
+					start = name.IndexOf(indicator);
+				}
+			});
+
+			new List<string>() { ".", " ", "-" }.ForEach(indicator =>
+			{
+				start = name.IndexOf(indicator);
+				while (start > -1)
+				{
+					name = name.Remove(0, start + indicator.Length).Trim();
+					start = name.IndexOf(indicator);
+				}
+			});
+
+			return name;
+		}
+
+		internal static List<string> GetAuthorNames(this string author)
+		{
+			var authors = new List<string>();
+
+			var theAuthors = author.GetNormalized();
+			new List<string>() { "&", " và ", " - ", "/" }.ForEach(indicator =>
+			{
+				var start = theAuthors.PositionOf(indicator);
+				while (start > -1)
+				{
+					authors.Add(theAuthors.Substring(0, start).GetNormalized());
+					theAuthors = theAuthors.Remove(0, start + indicator.Length).Trim();
+					start = theAuthors.PositionOf(indicator);
+				}
+			});
+
+			if (!string.IsNullOrWhiteSpace(theAuthors))
+				authors.Add(theAuthors.GetNormalized());
+
+			return authors;
+		}
 		#endregion
 
 		public static string GetPermanentID(this Book book)
@@ -417,7 +469,6 @@ namespace net.vieapps.Services.Books
 				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false)
 			) != null;
 		}
-
 	}
 
 	//  --------------------------------------------------------------------------------------------

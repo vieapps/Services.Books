@@ -953,7 +953,7 @@ namespace net.vieapps.Services.Books
 			Utility.Authors.Save(Utility.FolderOfStatisticFiles, "authors-{0}.json", true);
 		}
 
-		async Task RecomputeStatistics()
+		async Task RecomputeStatistics(string correlationID)
 		{
 			var stopwatch = new Stopwatch();
 			stopwatch.Start();
@@ -968,25 +968,34 @@ namespace net.vieapps.Services.Books
 			// authors
 			Utility.Authors.Clear();
 			var totalRecords = await Book.CountAsync(null, null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
-			var totalPages = new Tuple<long, int>(totalRecords, 100).GetTotalPages();
+			var totalPages = new Tuple<long, int>(totalRecords, 50).GetTotalPages();
+			await this.WriteLogAsync(correlationID, $"Total of {totalRecords} books need to process");
+
 			var pageNumber = 0;
 			while (pageNumber < totalPages)
 			{
 				pageNumber++;
-				(await Book.FindAsync(null, Sorts<Book>.Ascending("LastUpdated"), 100, pageNumber, null, this.CancellationTokenSource.Token).ConfigureAwait(false))
+				await this.WriteLogAsync(correlationID, $"Process page {pageNumber} / {totalPages}");
+
+				(await Book.FindAsync(null, Sorts<Book>.Ascending("LastUpdated"), 50, pageNumber, null, this.CancellationTokenSource.Token).ConfigureAwait(false))
+					.Where(book => !string.IsNullOrWhiteSpace(book.Author))
 					.ForEach(book =>
 					{
-						var author = Utility.Authors[book.Author];
-						if (author != null)
-							author.Counters++;
-						else
-							Utility.Authors.Add(new StatisticInfo()
-							{
-								Name = book.Author,
-								Counters = 1
-							});
+						book.Author.GetAuthorNames().ForEach(a =>
+						{
+							var author = Utility.Authors[a];
+							if (author != null)
+								author.Counters++;
+							else
+								Utility.Authors.Add(new StatisticInfo()
+								{
+									Name = a,
+									Counters = 1,
+									FirstChar = a.GetAuthorName().GetFirstChar().ToUpper()
+								});
+						});
 					});
-				await Task.Delay(UtilityService.GetRandomNumber(123, 234)).ConfigureAwait(false);
+				await Task.Delay(UtilityService.GetRandomNumber(345, 678)).ConfigureAwait(false);
 			}
 
 			// status
@@ -1936,14 +1945,15 @@ namespace net.vieapps.Services.Books
 			if ("true".IsEquals(recomputeStatisticsAtStartup))
 				Task.Run(async () =>
 				{
+					var correlationID = UtilityService.NewUID;
 					try
 					{
-						await this.WriteLogAsync(UtilityService.NewUID, "Start to re-compute statistics").ConfigureAwait(false);
-						await this.RecomputeStatistics().ConfigureAwait(false);
+						await this.WriteLogAsync(correlationID, "Start to re-compute statistics").ConfigureAwait(false);
+						await this.RecomputeStatistics(correlationID).ConfigureAwait(false);
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
+						await this.WriteLogAsync(correlationID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
 					}
 				}).ConfigureAwait(false);
 		}
@@ -1993,7 +2003,7 @@ namespace net.vieapps.Services.Books
 		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			//var authors = book.Author.GetAuthorName
+			var authors = book.Author.GetAuthorNames();
 
 			// update statistic on deleted
 			if (isDeleted)
@@ -2001,9 +2011,14 @@ namespace net.vieapps.Services.Books
 				var category = Utility.Categories[book.Category];
 				if (category != null)
 					category.Counters--;
-				var author = Utility.Authors[book.Author];
-				if (author != null)
-					author.Counters--;
+
+				authors.ForEach(a =>
+				{
+					var author = Utility.Authors[a];
+					if (author != null)
+						author.Counters--;
+				});
+
 				var books = Utility.Status["Books"];
 				if (books != null)
 					books.Counters--;
@@ -2015,20 +2030,25 @@ namespace net.vieapps.Services.Books
 				var category = Utility.Categories[book.Category];
 				if (category != null)
 					category.Counters++;
-				var author = Utility.Authors[book.Author];
-				if (author != null)
-					author.Counters++;
-				else
+
+				authors.ForEach(a =>
 				{
-					Utility.Authors.Add(new StatisticInfo()
+					var author = Utility.Authors[a];
+					if (author != null)
+						author.Counters++;
+					else
 					{
-						Name = book.Author,
-						Counters = 1
-					});
-					var authors = Utility.Status["Authors"];
-					if (authors != null)
-						authors.Counters++;
-				}
+						Utility.Authors.Add(new StatisticInfo()
+						{
+							Name = a,
+							Counters = 1
+						});
+						var theAuthors = Utility.Status["Authors"];
+						if (theAuthors != null)
+							theAuthors.Counters++;
+					}
+				});
+
 				var books = Utility.Status["Books"];
 				if (books != null)
 					books.Counters++;

@@ -229,38 +229,6 @@ namespace net.vieapps.Services.Books
 
 			return result;
 		}
-
-		public static string GetAuthorName(this string author)
-		{
-			var start = author.PositionOf(",");
-			if (start > 0)
-				return author.Substring(0, start);
-
-			var name = author.GetNormalized();
-			var indicators = new List<string>() { "(", "[", "{", "<" };
-			foreach (var indicator in indicators)
-			{
-				start = name.IndexOf(indicator);
-				while (start > -1)
-				{
-					name = name.Remove(start).Trim();
-					start = name.PositionOf(indicator);
-				}
-			}
-
-			indicators = new List<string>() { ".", " ", "-" };
-			foreach (var indicator in indicators)
-			{
-				start = name.PositionOf(indicator);
-				while (start > -1)
-				{
-					name = name.Remove(0, start + indicator.Length).Trim();
-					start = name.PositionOf(indicator);
-				}
-			}
-
-			return name;
-		}
 		#endregion
 
 		#region Normalize TOC
