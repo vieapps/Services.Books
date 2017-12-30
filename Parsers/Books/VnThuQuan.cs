@@ -115,10 +115,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				if (first != null && first.Count > 1 && first[1].PositionOf("=\"anhbia\"") > 0)
 				{
 					var cover = this.GetCoverImage(first);
-					if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Definitions.MediaUri + cover.GetFilename()))
+					if (string.IsNullOrWhiteSpace(this.Cover) || !this.Cover.IsEquals(Definitions.MediaURI + cover.GetFilename()))
 					{
 						this.MediaFileUrls.Add(cover);
-						this.Cover = Definitions.MediaUri + cover.GetFilename();
+						this.Cover = Definitions.MediaURI + cover.GetFilename();
 					}
 					if (this.Chapters[0].PositionOf(cover) > 0)
 					{
@@ -226,7 +226,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							start = body.PositionOf("src=", start + 1) + 5;
 							end = body.PositionOf(body[start - 1].ToString(), start + 1);
 							var image = body.Substring(start, end - start);
-							if (!image.IsStartsWith(Definitions.MediaUri))
+							if (!image.IsStartsWith(Definitions.MediaURI))
 							{
 								var info = UtilityService.GetFileParts(image, false);
 								image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
@@ -236,7 +236,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 									this.MediaFileUrls.Add(image);
 
 								body = body.Remove(start, end - start);
-								body = body.Insert(start, Definitions.MediaUri + image.GetFilename());
+								body = body.Insert(start, Definitions.MediaURI + image.GetFilename());
 							}
 							start = body.PositionOf("<img", start + 1);
 						}

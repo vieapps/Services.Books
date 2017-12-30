@@ -12,6 +12,7 @@ using Newtonsoft.Json.Linq;
 
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Caching;
+using net.vieapps.Components.Security;
 #endregion
 
 namespace net.vieapps.Services.Books
@@ -47,7 +48,7 @@ namespace net.vieapps.Services.Books
 
 		internal void Start(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			this.MaxPages = UtilityService.GetAppSetting("BookCrawlerMaxPages", "1").CastAs<int>();
+			this.MaxPages = UtilityService.GetAppSetting("Book:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
 			Task.Run(async () =>
@@ -63,10 +64,12 @@ namespace net.vieapps.Services.Books
 				var stopwatch = new Stopwatch();
 				stopwatch.Start();
 
-				await Task.WhenAll(
-					this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken),
-					this.RunCrawlerOfISachAsync(onUpdate, cancellationToken)
-				).ConfigureAwait(false);
+				var tasks = new List<Task>();
+				if ("true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")))
+					tasks.Add(this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken));
+				if ("true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")))
+					tasks.Add(this.RunCrawlerOfISachAsync(onUpdate, cancellationToken));
+				await Task.WhenAll(tasks).ConfigureAwait(false);
 
 				stopwatch.Stop();
 				onCompleted?.Invoke(stopwatch.ElapsedMilliseconds);
@@ -119,10 +122,10 @@ namespace net.vieapps.Services.Books
 			while (index < bookParsers.Count)
 			{
 				var parser = bookParsers[index];
-				if (!Utility.IsExisted(parser.Title, parser.Author))
+				if (!await parser.ExistsAsync(cancellationToken).ConfigureAwait(false))
 					try
 					{
-						await this.CrawlAsync(parser, folder, onUpdate, UtilityService.GetAppSetting("BookCrawlVnThuQuanParalell", "true").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
+						await this.CrawlAsync(parser, folder, onUpdate, UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
 						success++;
 					}
 					catch (Exception ex)
@@ -205,7 +208,7 @@ namespace net.vieapps.Services.Books
 			while (index < bookParsers.Count)
 			{
 				var parser = bookParsers[index];
-				if (!Utility.IsExisted(parser.Title, parser.Author))
+				if (!await parser.ExistsAsync(cancellationToken).ConfigureAwait(false))
 					try
 					{
 						// delay
@@ -216,8 +219,12 @@ namespace net.vieapps.Services.Books
 						await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
 
 						// crawl
-						await this.CrawlAsync(parser, folder, onUpdate, UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
+						await this.CrawlAsync(parser, folder, onUpdate, UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
 						success++;
+					}
+					catch (AccessDeniedException ex)
+					{
+						this.AddLogs($"Error occurred while fetching book [{parser.Title} - {parser.SourceUrl}]", ex);
 					}
 					catch (Exception ex)
 					{

@@ -1,5 +1,6 @@
 ﻿#region Related components
 using System;
+using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -120,7 +121,7 @@ namespace net.vieapps.Services.Books
 						this._PermanentID = UtilityService.GetUUID();
 					else
 					{
-						this._PermanentID = Utility.GetDataFromJsonFile(Utility.FolderOfDataFiles + @"\" + this.Title.GetFirstChar() + @"\" + this.Name + ".json", "PermanentID");
+						this._PermanentID = Utility.GetBookAttribute(this.GetFilePath() + ".json", "PermanentID") ?? this.ID;
 						Utility.Cache.Set(this);
 					}
 				}
@@ -178,10 +179,7 @@ namespace net.vieapps.Services.Books
 			{
 				if (asNormalized)
 				{
-					obj["Cover"] = string.IsNullOrWhiteSpace(this.Cover)
-						? Definitions.MediaUri.NormalizeMediaFileUris(null)
-						: this.Cover.NormalizeMediaFileUris(this);
-
+					obj["Cover"] = this.GetCoverImageUri();
 					obj.Add(new JProperty("TOCs", new JArray()));
 					obj.Add(new JProperty("Files", this.GetFiles()));
 

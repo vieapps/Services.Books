@@ -168,7 +168,7 @@ namespace net.vieapps.Services.Books
 					return this.DeleteBookAsync(requestInfo, cancellationToken);
 			}
 
-			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+			throw new MethodNotAllowedException(requestInfo.Verb);
 		}
 
 		#region Search books
@@ -265,6 +265,24 @@ namespace net.vieapps.Services.Books
 			// return the result
 			return result;
 		}
+
+		async Task SendLastUpdatedBooksAsync()
+		{
+			try
+			{
+				var filter = Filters<Book>.NotEquals("Status", "Inactive");
+				var sort = Sorts<Book>.Descending("LastUpdated");
+				await this.SendUpdateMessagesAsync((await Book.FindAsync(filter, sort, 20, 1, this.GetCacheKey<Book>(filter, sort) + ":1", this.CancellationTokenSource.Token).ConfigureAwait(false))
+					.Select(book => new BaseMessage()
+					{
+						Type = "Books#Book",
+						Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray())
+					})
+					.ToList(),
+					"*", null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+			}
+			catch { }
+		}
 		#endregion
 
 		#region Create a book
@@ -310,29 +328,17 @@ namespace net.vieapps.Services.Books
 			Book bookJson = null;
 			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || "brief-info".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
-				var keyJson = id.GetCacheKey<Book>() + "-json";
-				bookJson = await Utility.Cache.GetAsync<Book>(keyJson).ConfigureAwait(false);
-				if (bookJson == null)
+				bookJson = await book.GetBookAsync().ConfigureAwait(false);
+				if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
 				{
-					bookJson = book.Clone();
-					var jsonFilePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json");
-					if (File.Exists(jsonFilePath))
-					{
-						bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(jsonFilePath).ConfigureAwait(false)));
-						await Utility.Cache.SetAsFragmentsAsync(keyJson, bookJson).ConfigureAwait(false);
+					book.SourceUrl = bookJson.SourceUrl;
+					await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+				}
 
-						if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
-						{
-							book.SourceUrl = bookJson.SourceUrl;
-							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
-						}
-
-						if (!book.TotalChapters.Equals(bookJson.Chapters.Count))
-						{
-							book.TotalChapters = bookJson.Chapters.Count;
-							await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
-						}
-					}
+				if (!book.TotalChapters.Equals(bookJson.Chapters.Count))
+				{
+					book.TotalChapters = bookJson.Chapters.Count;
+					await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 				}
 			}
 
@@ -369,7 +375,7 @@ namespace net.vieapps.Services.Books
 				{
 					{ "ID", book.ID },
 					{ "Chapter", chapter },
-					{ "Content", bookJson.Chapters.Count > 0 ? bookJson.Chapters[chapter - 1].NormalizeMediaFileUris(book) : "" }
+					{ "Content", bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[chapter - 1]) : "" }
 				};
 			}
 
@@ -378,15 +384,16 @@ namespace net.vieapps.Services.Books
 				return new JObject()
 				{
 					{ "ID", bookJson.ID },
-					{ "PermanentID", bookJson.PermanentID },
+					{ "PermanentID", bookJson.GetPermanentID() },
+					{ "Category", bookJson.Category },
 					{ "Title", bookJson.Title },
 					{ "Author", bookJson.Author },
-					{ "Category", bookJson.Category }
+					{ "Name", bookJson.Name }
 				};
 
 			// generate files
 			else if ("files".IsEquals(objectIdentity))
-				return this.GenerateFiles(book);
+				return this.GenerateFiles(bookJson ?? book);
 
 			// re-crawl
 			else if ("recrawl".IsEquals(objectIdentity))
@@ -405,9 +412,8 @@ namespace net.vieapps.Services.Books
 					{
 						json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
 						if (book.TotalChapters < 2)
-							json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? bookJson.Chapters[0].NormalizeMediaFileUris(book) : ""));
-					},
-					true
+							json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : ""));
+					}
 				);
 		}
 
@@ -417,10 +423,27 @@ namespace net.vieapps.Services.Books
 			var counter = book.Counters.FirstOrDefault(c => c.Type.Equals(action));
 			if (counter != null)
 			{
+				// update counters
 				counter.Total++;
 				counter.Week = counter.LastUpdated.IsInCurrentWeek() ? counter.Week + 1 : 1;
 				counter.Month = counter.LastUpdated.IsInCurrentMonth() ? counter.Month + 1 : 1;
 				counter.LastUpdated = DateTime.Now;
+
+				// reset counter of download
+				if (!"download".IsEquals(action))
+				{
+					var downloadCounter = book.Counters.FirstOrDefault(c => c.Type.Equals("download"));
+					if (downloadCounter != null)
+					{
+						if (!downloadCounter.LastUpdated.IsInCurrentWeek())
+							downloadCounter.Week =  0;
+						if (!downloadCounter.LastUpdated.IsInCurrentMonth())
+							downloadCounter.Month = 0;
+						downloadCounter.LastUpdated = DateTime.Now;
+					}
+				}
+
+				// update database
 				await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 			}
 
@@ -451,32 +474,36 @@ namespace net.vieapps.Services.Books
 			if (book == null)
 				throw new InformationNotFoundException();
 
-			// update information
+			// prepare old values
+			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
+			var name = book.Name;
 			var category = book.Category;
 			var author = book.Author;
+
+			// old files to delete
+			var oldFilePath = Utility.GetFilePathOfBook(name);
+			var beDeletedFiles = new List<FileInfo>()
+			{
+				new FileInfo(oldFilePath + ".epub"),
+				new FileInfo(oldFilePath + ".mobi")
+			};
+
+			// update information
 			var body = requestInfo.GetBodyExpando();
 			var tocs = body.Get("TOCs", "").Replace("\t", "").Replace("\r", "").Trim().ToArray("\n");
-
 			book.CopyFrom(body, "ID,TOCs,Cover".ToHashSet());
-			book.LastUpdated = DateTime.Now;
 
 			// update JSON file
-			var cacheKey = book.GetCacheKey() + "-json";
-			var bookJson = await Utility.Cache.GetAsync<Book>(cacheKey).ConfigureAwait(false);
-			if (bookJson == null && File.Exists(Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json")))
-			{
-				bookJson = book.Clone();
-				bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".json")).ConfigureAwait(false)));
-			}
-
 			if (bookJson != null)
 			{
 				bookJson.Title = book.Title;
-				bookJson.Original = book.Original;
+				bookJson.Original = book.Original = (book.Original ?? "");
 				bookJson.Author = book.Author;
-				bookJson.Publisher = book.Publisher;
-				bookJson.Producer = book.Producer;
+				bookJson.Publisher = book.Publisher = (book.Publisher ?? "");
+				bookJson.Producer = book.Producer = (book.Producer ?? "");
+				bookJson.Translator = book.Translator = (book.Translator ?? "");
 				bookJson.Category = book.Category;
+				bookJson.LastUpdated = DateTime.Now;
 
 				// update TOCs
 				if (tocs.Length.Equals(bookJson.TOCs.Count))
@@ -486,48 +513,53 @@ namespace net.vieapps.Services.Books
 
 				// update cover image
 				var cover = body.Get("Cover", "");
-				if (!string.IsNullOrWhiteSpace(cover) && cover.IsStartsWith(Definitions.MediaUri) && !cover.IsEquals(book.Cover))
+				if (!string.IsNullOrWhiteSpace(cover) && cover.IsStartsWith(Definitions.MediaURI) && !cover.IsEquals(book.Cover))
 				{
-					if (!string.IsNullOrWhiteSpace(book.Cover) && book.Cover.IsStartsWith(Definitions.MediaUri))
-					{
-						var oldCover = book.Cover.Replace(Definitions.MediaUri, bookJson.PermanentID + "-");
-						if (File.Exists(Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, oldCover)))
-							File.Move(Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, oldCover), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder, oldCover));
-					}
+					if (!string.IsNullOrWhiteSpace(book.Cover) && book.Cover.IsStartsWith(Definitions.MediaURI))
+						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
 					bookJson.Cover = book.Cover = cover;
 				}
 
 				// update JSON file
-				var path = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name));
-				await Task.WhenAll(
-					UtilityService.WriteTextFileAsync(path + ".json", bookJson.ToJson(
-						false,
-						(json) =>
-						{
-							json.Remove("Counters");
-							json.Remove("RatingPoints");
-							json.Remove("LastUpdated");
-							json.Add(new JProperty("PermanentID", bookJson.PermanentID));
-							json.Add(new JProperty("Credits", bookJson.Credits));
-							json.Add(new JProperty("Stylesheet", bookJson.Stylesheet));
-							json.Add(new JProperty("TOCs", bookJson.TOCs.ToJArray()));
-							json.Add(new JProperty("Chapters", bookJson.Chapters.ToJArray()));
-						},
-						false).ToString(Formatting.Indented)),
-					Utility.Cache.SetAsync(cacheKey, bookJson)
+				await UtilityService.WriteTextFileAsync(Utility.GetFilePathOfBook(bookJson.Name) + ".json", bookJson.ToJson(
+					false,
+					(json) =>
+					{
+						json.Remove("Counters");
+						json.Remove("RatingPoints");
+						json.Remove("LastUpdated");
+						json.Add(new JProperty("PermanentID", bookJson.GetPermanentID()));
+						json.Add(new JProperty("Credits", bookJson.Credits ?? ""));
+						json.Add(new JProperty("Stylesheet", bookJson.Stylesheet ?? ""));
+						json.Add(new JProperty("TOCs", bookJson.TOCs.ToJArray()));
+						json.Add(new JProperty("Chapters", bookJson.Chapters.ToJArray()));
+					},
+					false).ToString(Formatting.Indented)
 				).ConfigureAwait(false);
 
-				// delete old e-book files
-				if (File.Exists(path + ".epub"))
-					File.Delete(path + ".epub");
-
-				if (File.Exists(path + ".mobi"))
-					File.Delete(path + ".mobi");
+				// old files
+				if (!name.IsEquals(bookJson.Name))
+				{
+					if (File.Exists(oldFilePath + ".json"))
+					{
+						var trashFilePath = Path.Combine(Utility.FolderOfTrashFiles, UtilityService.GetNormalizedFilename(name));
+						if (File.Exists(trashFilePath + ".json"))
+							File.Delete(trashFilePath + ".json");
+						File.Move(oldFilePath + ".json", trashFilePath + ".json");
+					}
+					UtilityService.MoveFiles(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder), Path.Combine(Utility.GetFolderPathOfBook(bookJson.Name), Definitions.MediaFolder), bookJson.GetPermanentID() + "-*.*");
+				}
+				else
+				{
+					beDeletedFiles.Add(new FileInfo(book.GetFilePath() + ".epub"));
+					beDeletedFiles.Add(new FileInfo(book.GetFilePath() + ".mobi"));
+				}
 			}
 			else
 				tocs = book.TOCs.ToArray();
 
 			// update database
+			book.LastUpdated = DateTime.Now;
 			await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
 
 			// update statistics
@@ -557,9 +589,32 @@ namespace net.vieapps.Services.Books
 				{
 					Type = "Books#Book",
 					DeviceID = "*",
-					Data = book.ToJson(false, (json) => json["TOCs"] = tocs.ToJArray())
+					Data = (bookJson ?? book).ToJson(false, (json) => json["TOCs"] = tocs.ToJArray())
 				}, cancellationToken)
 			).ConfigureAwait(false);
+
+			// move old files to trash
+			beDeletedFiles
+				.Where(file => file.Exists)
+				.ForEach(file =>
+				{
+					var path = ".json|.epub|.mobi".IsContains(file.Extension)
+						? Path.Combine(Utility.FolderOfTrashFiles, file.Name)
+						: Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder, file.Name);
+					if (File.Exists(path))
+						File.Delete(path);
+					File.Move(file.FullName, path);
+				});
+
+#if DEBUG || UPDATELOGS
+			body.Remove("Cover");
+			await this.WriteLogsAsync(requestInfo, new List<string>()
+			{
+				$"Update a book [{book.Name}]",
+				$"Request =>\r\n{body.ToJObject().ToString(Formatting.Indented)}",
+				$"Be deleted files (be moved into trash): {(beDeletedFiles.Count < 1 ? "None" : beDeletedFiles.Count + " file(s)\r\n" + string.Join("\r\n=> ", beDeletedFiles.Select(file => file.FullName)))}"
+			}, null, cancellationToken);
+#endif
 
 			// return
 			return new JObject();
@@ -585,23 +640,16 @@ namespace net.vieapps.Services.Books
 				throw new InformationNotFoundException();
 
 			var path = book.GetFolderPath();
-			var filename = UtilityService.GetNormalizedFilename(book.Title + " - " + book.Author);
-			var keyJson = book.GetCacheKey() + "-json";
-			var bookJson = await Utility.Cache.GetAsync<Book>(keyJson).ConfigureAwait(false);
-			if (bookJson == null)
-			{
-				bookJson = book.Clone();
-				if (File.Exists(Path.Combine(path, filename + ".json")))
-					bookJson.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(path, filename + ".json")).ConfigureAwait(false)));
-			}
-
-			// move files
-			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
-			if (!string.IsNullOrWhiteSpace(bookJson.PermanentID))
-				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaFolder), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder), bookJson.PermanentID + "-*.*", true);
+			var filename = UtilityService.GetNormalizedFilename(book.Name);
+			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
 
 			// delete from database
 			await Book.DeleteAsync<Book>(book.ID, cancellationToken).ConfigureAwait(false);
+
+			// move files
+			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
+			if (!string.IsNullOrWhiteSpace(bookJson.GetPermanentID()))
+				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaFolder), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder), bookJson.GetPermanentID() + "-*.*", true);
 
 			// clear related cached & send update message
 			await Task.WhenAll(
@@ -680,8 +728,8 @@ namespace net.vieapps.Services.Books
 						await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false);
 					},
 					parser is Parsers.Books.ISach
-						? UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>()
-						: UtilityService.GetAppSetting("BookCrawlVnThuQuanParalell", "true").CastAs<bool>(),
+						? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
+						: UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(),
 					this.CancellationTokenSource.Token
 				).ConfigureAwait(false);
 
@@ -777,8 +825,8 @@ namespace net.vieapps.Services.Books
 							await this.OnBookUpdatedAsync(b, token).ConfigureAwait(false);
 						},
 						parser is Parsers.Books.ISach
-							? UtilityService.GetAppSetting("BookCrawlISachParalell", "false").CastAs<bool>()
-							: UtilityService.GetAppSetting("BookCrawlVnThuQuanParalell", "true").CastAs<bool>(),
+							? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
+							: UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(),
 						this.CancellationTokenSource.Token,
 						fullRecrawl ? false : true
 					).ConfigureAwait(false);
@@ -979,7 +1027,7 @@ namespace net.vieapps.Services.Books
 					return this.UpdateProfileAsync(requestInfo, cancellationToken);
 			}
 
-			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+			throw new MethodNotAllowedException(requestInfo.Verb);
 		}
 
 		#region Create an account profile
@@ -1086,7 +1134,7 @@ namespace net.vieapps.Services.Books
 			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
 				return this.CopyFilesAsync(requestInfo, cancellationToken);
 
-			return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+			throw new MethodNotAllowedException(requestInfo.Verb);
 		}
 
 		#region Copy files of a book
@@ -1115,7 +1163,7 @@ namespace net.vieapps.Services.Books
 			if (File.Exists(source + filename))
 			{
 				File.Copy(source + filename, destination + filename, true);
-				var permanentID = Utility.GetDataFromJsonFile(source + filename, "PermanentID");
+				var permanentID = Utility.GetBookAttribute(source + filename, "PermanentID");
 				(await UtilityService.GetFilesAsync(source + Definitions.MediaFolder, permanentID + "-*.*").ConfigureAwait(false))
 					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaFolder + @"\" + file.Name, true));
 			}
@@ -1127,7 +1175,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		#region Generate files of a book
+		#region Generate e-book files of a book
 		JObject GenerateFiles(Book book)
 		{
 			// run a task to generate files
@@ -1526,7 +1574,7 @@ namespace net.vieapps.Services.Books
 				if (book.Chapters != null && book.Chapters.Count > 0)
 					for (var index = 0; index < book.Chapters.Count; index++)
 					{
-						var chapter = book.Chapters[index].NormalizeMediaFileUris(book);
+						var chapter = book.NormalizeMediaFileUris(book.Chapters[index]);
 						foreach (var tag in headingTags)
 							chapter = chapter.Replace(StringComparison.OrdinalIgnoreCase, "<" + tag + ">", "\n<" + tag + ">").Replace(StringComparison.OrdinalIgnoreCase, "</" + tag + ">", "</" + tag + ">\n");
 						chapter = chapter.Trim().Replace("</p><p>", "</p>\n<p>").Replace("\n\n", "\n");
@@ -1673,6 +1721,7 @@ namespace net.vieapps.Services.Books
 					account.Bookmarks = account.Bookmarks
 						.OrderByDescending(b => b.Time)
 						.Distinct(new Account.BookmarkComparer())
+						.Where(b => Book.Get<Book>(b.ID) != null)
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
@@ -1762,6 +1811,12 @@ namespace net.vieapps.Services.Books
 
 		void RegisterTimers(string[] args = null)
 		{
+			// last updated
+			this.StartTimer(async () =>
+			{
+				await this.SendLastUpdatedBooksAsync().ConfigureAwait(false);
+			}, 2 * 60 * 60);
+
 			// delete old .EPUB & .MOBI files
 			this.StartTimer(() =>
 			{
@@ -1819,9 +1874,9 @@ namespace net.vieapps.Services.Books
 				}
 			};
 
-			var runAtStartup = UtilityService.GetAppSetting("BookRunCrawlerAtStartup");
+			var runAtStartup = UtilityService.GetAppSetting("Books:Crawler-RunAtStartup");
 			if (runAtStartup == null)
-				runAtStartup = args?.FirstOrDefault(a => a.StartsWith("/run-crawler-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/run-crawler-at-startup:", "");
+				runAtStartup = args?.FirstOrDefault(a => a.StartsWith("/books-crawler-run-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/books-crawler-run-at-startup:", "");
 
 			this.StartTimer(() =>
 			{
@@ -1874,9 +1929,9 @@ namespace net.vieapps.Services.Books
 			}, 60 * 60);
 
 			// recompute statistics
-			var recomputeStatisticsAtStartup = UtilityService.GetAppSetting("BookRecomputeStatisticsAtStartup");
+			var recomputeStatisticsAtStartup = UtilityService.GetAppSetting("Books:Statistics-RecomputeAtStartup");
 			if (recomputeStatisticsAtStartup == null)
-				recomputeStatisticsAtStartup = args?.FirstOrDefault(a => a.StartsWith("/recompute-statistics-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/recompute-statistics-at-startup:", "");
+				recomputeStatisticsAtStartup = args?.FirstOrDefault(a => a.StartsWith("/books-statistics-recompute-at-startup:"))?.Replace(StringComparison.OrdinalIgnoreCase, "/books-statistics-recompute-at-startup:", "");
 
 			if ("true".IsEquals(recomputeStatisticsAtStartup))
 				Task.Run(async () =>

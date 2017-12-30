@@ -3,6 +3,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
 
@@ -26,7 +28,7 @@ namespace net.vieapps.Services.Books
 				if (Utility._CacheExpirationTime < 0)
 					try
 					{
-						Utility._CacheExpirationTime = UtilityService.GetAppSetting("CacheExpirationTime", "30").CastAs<int>();
+						Utility._CacheExpirationTime = UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>();
 					}
 					catch
 					{
@@ -42,7 +44,7 @@ namespace net.vieapps.Services.Books
 		{
 			get
 			{
-				return Utility._Cache ?? (Utility._Cache = new Cache("VIEApps-Services-Books", Utility.CacheExpirationTime, UtilityService.GetAppSetting("CacheProvider")));
+				return Utility._Cache ?? (Utility._Cache = new Cache("VIEApps-Services-Books", Utility.CacheExpirationTime, UtilityService.GetAppSetting("Cache:Provider")));
 			}
 		}
 		#endregion
@@ -55,7 +57,7 @@ namespace net.vieapps.Services.Books
 			get
 			{
 				if (string.IsNullOrWhiteSpace(Utility._FilesHttpUri))
-					Utility._FilesHttpUri = UtilityService.GetAppSetting("FilesHttpUri", "https://afs.vieapps.net");
+					Utility._FilesHttpUri = UtilityService.GetAppSetting("HttpUri:Files", "https://afs.vieapps.net");
 				while (Utility._FilesHttpUri.EndsWith("/"))
 					Utility._FilesHttpUri = Utility._FilesHttpUri.Left(Utility._FilesHttpUri.Length - 1);
 				return Utility._FilesHttpUri;
@@ -70,11 +72,11 @@ namespace net.vieapps.Services.Books
 			{
 				if (string.IsNullOrWhiteSpace(Utility._FilesPath))
 				{
-					Utility._FilesPath = UtilityService.GetAppSetting("BookFilesPath");
+					Utility._FilesPath = UtilityService.GetAppSetting("Path:Books");
 					if (string.IsNullOrWhiteSpace(Utility._FilesPath))
-						Utility._FilesPath = Directory.GetCurrentDirectory() + @"\data-files\books";
-					if (!Utility._FilesPath.EndsWith(@"\"))
-						Utility._FilesPath += @"\";
+						Utility._FilesPath = Path.Combine(Directory.GetCurrentDirectory(), "data-files", "books");
+					if (!Utility._FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+						Utility._FilesPath += Path.DirectorySeparatorChar.ToString();
 				}
 				return Utility._FilesPath;
 			}
@@ -195,7 +197,12 @@ namespace net.vieapps.Services.Books
 		#region Working with folders & files
 		public static string GetFolderPathOfBook(string name)
 		{
-			return Utility.FolderOfDataFiles + (string.IsNullOrWhiteSpace(name) ? "" : Path.DirectorySeparatorChar.ToString() + name.GetFirstChar().ToLower());
+			return Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar().ToLower());
+		}
+
+		public static string GetFolderPath(this Book book)
+		{
+			return Utility.GetFolderPathOfBook(book.Name);
 		}
 
 		public static string GetFilePathOfBook(string name)
@@ -208,35 +215,30 @@ namespace net.vieapps.Services.Books
 			return Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
 		}
 
-		public static string GetFolderPath(this Book book)
+		public static string GetFilePath(this Book book)
 		{
-			return Utility.GetFolderPathOfBook(book.Name);
+			return Utility.GetFilePathOfBook(book.Name);
 		}
 
 		public static string GetMediaFilePathOfBook(string uri, string name, string identifier)
 		{
 			var path = Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-");
-			return uri.Replace(Definitions.MediaUri, path);
-		}
-
-		public static string GetMediaFilePath(this Book book)
-		{
-			return Path.Combine(book.GetFolderPath(), Definitions.MediaFolder) + Path.DirectorySeparatorChar.ToString()
-				+ (book != null
-					? (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "-"
-					: "no-media-file".Url64Encode() + "/no/cover/image.png");
+			return uri.Replace(Definitions.MediaURI, path);
 		}
 
 		public static string GetFileSize(string filePath)
 		{
 			return UtilityService.GetFileSize(filePath) ?? "generating...";
 		}
+		#endregion
 
-		public static string GetDataOfJson(string json, string attribute)
+		#region Working with related data of JSON
+		public static string GetBookAttribute(string filePath, string attribute)
 		{
-			if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(attribute))
+			if (!File.Exists(filePath) || string.IsNullOrWhiteSpace(attribute))
 				return "";
 
+			var json = UtilityService.ReadTextFile(filePath, 20).Aggregate((i, j) => i + "\n" + j).ToString();
 			var indicator = "\"" + attribute + "\":";
 			var start = json.PositionOf(indicator);
 			start = start < 0
@@ -248,50 +250,37 @@ namespace net.vieapps.Services.Books
 
 			return start > -1 && end > 0
 				? json.Substring(start + 1, end - start - 1).Trim()
-				: "";
+				: null;
 		}
 
-		public static string GetDataFromJsonFile(string filePath, string attribute)
+		public static Book GetBook(this Book book)
 		{
-			filePath = UtilityService.GetNormalizedFilename(filePath);
-			if (!File.Exists(filePath) || string.IsNullOrWhiteSpace(attribute))
-				return "";
-
-			string json = UtilityService.ReadTextFile(filePath, 15).Aggregate((i, j) => i + "\n" + j).ToString();
-			return Utility.GetDataOfJson(json, attribute);
+			var key = book.GetCacheKey() + "-json";
+			var full = Utility.Cache.Get<Book>(key);
+			if (full == null)
+			{
+				full = book.Clone();
+				if (File.Exists(book.GetFilePath() + ".json"))
+					full.Copy(JObject.Parse(UtilityService.ReadTextFile(book.GetFilePath() + ".json")));
+				Utility.Cache.SetAsFragments(key, full);
+			}
+			return full;
 		}
-		#endregion
 
-		#region Working with URIs
-		public static string GetMediaFileUri(this Book book)
+		public static async Task<Book> GetBookAsync(this Book book)
 		{
-			return Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/"
-				+ (book != null
-					? book.Title.Url64Encode() + "/" + (!string.IsNullOrWhiteSpace(book.PermanentID) ? book.PermanentID : book.ID) + "/"
-					: "no-media-file".Url64Encode() + "/no/cover/image.png");
+			var key = book.GetCacheKey() + "-json";
+			var full = await Utility.Cache.GetAsync<Book>(key).ConfigureAwait(false);
+			if (full == null)
+			{
+				full = book.Clone();
+				if (File.Exists(book.GetFilePath() + ".json"))
+					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(book.GetFilePath() + ".json").ConfigureAwait(false)));
+				await Utility.Cache.SetAsFragmentsAsync(key, full).ConfigureAwait(false);
+			}
+			return full;
 		}
 
-		public static string NormalizeMediaFileUris(this string content, Book book)
-		{
-			return string.IsNullOrWhiteSpace(content)
-				? content
-				: content.Replace(Definitions.MediaUri, book.GetMediaFileUri());
-		}
-
-		public static string NormalizeMediaFilePaths(this string content, Book book)
-		{
-			return string.IsNullOrWhiteSpace(content)
-				? content
-				: content.Replace(Definitions.MediaUri, book.GetMediaFilePath());
-		}
-
-		public static string GetDownloadUri(this Book book)
-		{
-			return Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
-		}
-		#endregion
-
-		#region Working with JSON file
 		internal static void Copy(this Book book, JObject json)
 		{
 			book.PermanentID = (json["PermanentID"] as JValue).Value as string;
@@ -311,18 +300,39 @@ namespace net.vieapps.Services.Books
 			foreach (JValue item in array)
 				book.Chapters.Add(item.Value as string);
 		}
+		#endregion
 
-		internal static bool IsExisted(string name)
+		#region Working with URIs
+		public static string GetMediaFileUri(this Book book)
 		{
-			var isExisted = File.Exists(Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name) + ".json"));
-			if (!isExisted)
-				isExisted = File.Exists(Path.Combine(Utility.FolderOfTrashFiles, UtilityService.GetNormalizedFilename(name) + ".json"));
-			return isExisted;
+			return Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/";
 		}
 
-		internal static bool IsExisted(string title, string author)
+		public static string GetCoverImageUri(this Book book)
 		{
-			return Utility.IsExisted(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
+			return string.IsNullOrWhiteSpace(book.Cover)
+				? book.GetMediaFileUri() + "no-media-file".Url64Encode() + "/no/cover/image.png"
+				: book.Cover.Replace(Definitions.MediaURI, book.GetMediaFileUri() + book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
+
+		}
+
+		public static string NormalizeMediaFileUris(this Book book, string content)
+		{
+			return string.IsNullOrWhiteSpace(content)
+				? content
+				: content.Replace(Definitions.MediaURI, book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
+		}
+
+		public static string NormalizeMediaFilePaths(this string content, Book book)
+		{
+			return string.IsNullOrWhiteSpace(content)
+				? content
+				: content.Replace(Definitions.MediaURI, Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, book.GetPermanentID() + "-"));
+		}
+
+		public static string GetDownloadUri(this Book book)
+		{
+			return Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
 		}
 		#endregion
 
@@ -382,6 +392,31 @@ namespace net.vieapps.Services.Books
 			}
 		}
 		#endregion
+
+		public static string GetPermanentID(this Book book)
+		{
+			return !string.IsNullOrWhiteSpace(book.PermanentID) && book.PermanentID.IsValidUUID()
+				? book.PermanentID
+				: Utility.GetBookAttribute(book.GetFilePath() + ".json", "PermanentID") ?? book.ID;
+		}
+
+		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			if (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
+				&& await Utility.Cache.ExistsAsync((parser.Title + " - " + parser.Author).Trim().ToLower().GetMD5()).ConfigureAwait(false))
+				return true;
+
+			var filename = UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json";
+			if (File.Exists(Path.Combine(Utility.GetFilePathOfBook(filename), filename)))
+				return true;
+			else if (File.Exists(Path.Combine(Utility.FolderOfTrashFiles, filename)))
+				return true;
+
+			return (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
+				? await Book.GetAsync<Book>((parser.Title + " - " + parser.Author).Trim().ToLower().GetMD5(), cancellationToken).ConfigureAwait(false)
+				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false)
+			) != null;
+		}
 
 	}
 

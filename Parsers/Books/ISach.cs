@@ -10,6 +10,7 @@ using System.Diagnostics;
 using Newtonsoft.Json;
 
 using net.vieapps.Components.Utility;
+using net.vieapps.Components.Security;
 #endregion
 
 namespace net.vieapps.Services.Books.Parsers.Books
@@ -57,7 +58,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				// check permission
 				if (html.PositionOf("Để đọc tác phẩm này, được yêu cầu phải đăng nhập") > 0)
-					throw new InformationNotFoundException("Access Denied => Phải đăng nhập");
+					throw new AccessDeniedException("Access Denied => Phải đăng nhập");
 
 				// parse the book to get details
 				await this.ParseBookAsync(html, cancellationToken);
@@ -100,10 +101,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				await this.ParseAsync(url, onParsed, null, cancellationToken).ConfigureAwait(false);
 
 			// cover image
-			if (!string.IsNullOrWhiteSpace(this.Cover) && !this.Cover.IsStartsWith(Definitions.MediaUri))
+			if (!string.IsNullOrWhiteSpace(this.Cover) && !this.Cover.IsStartsWith(Definitions.MediaURI))
 			{
 				this.MediaFileUrls.Add(this.Cover);
-				this.Cover = Definitions.MediaUri + this.Cover.GetFilename();
+				this.Cover = Definitions.MediaURI + this.Cover.GetFilename();
 			}
 
 			// fetch chapters
@@ -506,7 +507,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				start = body.PositionOf("src=", start + 1) + 5;
 				end = body.PositionOf(body[start - 1].ToString(), start + 1);
 				var image = body.Substring(start, end - start);
-				if (!image.IsStartsWith(Definitions.MediaUri))
+				if (!image.IsStartsWith(Definitions.MediaURI))
 				{
 					var info = UtilityService.GetFileParts(image, false);
 					image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
@@ -516,7 +517,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 						this.MediaFileUrls.Add(image);
 
 					body = body.Remove(start, end - start);
-					body = body.Insert(start, Definitions.MediaUri + image.GetFilename());
+					body = body.Insert(start, Definitions.MediaURI + image.GetFilename());
 				}
 				start = body.PositionOf("<img", start + 1);
 			}

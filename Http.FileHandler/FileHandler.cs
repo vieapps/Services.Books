@@ -77,10 +77,9 @@ namespace net.vieapps.Services.Books
 			if (!"no-media-file".IsEquals(name) && (requestInfo.Length < 5 || !requestInfo[3].IsValidUUID()))
 				throw new InvalidRequestException();
 
-			var filePath = Utility.FolderOfDataFiles + Path.DirectorySeparatorChar.ToString()
-				+ ("no-media-file".IsEquals(name)
-					? "no-image.png"
-					: name.GetFirstChar() + Path.DirectorySeparatorChar.ToString() + Definitions.MediaFolder + Path.DirectorySeparatorChar.ToString() + requestInfo[3] + "-" + requestInfo[4]);
+			var filePath = "no-media-file".IsEquals(name)
+				? Path.Combine(Utility.FolderOfDataFiles, "no-image.png")
+				: Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar(), Definitions.MediaFolder, requestInfo[3] + "-" + requestInfo[4]);
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
@@ -151,7 +150,7 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar(), UtilityService.GetNormalizedFilename(name) + ext));
+			var fileInfo = new FileInfo(Utility.GetFilePathOfBook(name) + ext);
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
@@ -205,7 +204,8 @@ namespace net.vieapps.Services.Books
 			}).ConfigureAwait(false);
 
 			var path = Path.Combine(Utility.FolderOfDataFiles, (info["Title"] as JValue).Value.ToString().GetFirstChar(), Definitions.MediaFolder, (info["PermanentID"] as JValue).Value as string + "-");
-			var name = ((info["Title"] as JValue).Value as string + " - " + (info["Author"] as JValue).Value as string + " - " + DateTime.Now.ToIsoString()).GetMD5() + ".png";
+			var name = ((info["Title"] as JValue).Value as string + " - " + (info["Author"] as JValue).Value as string + " - " + DateTime.Now.ToIsoString()).GetMD5();
+			var extension = "jpg";
 
 			// base64 image
 			if (context.Request.Headers["x-as-base64"] != null)
@@ -214,22 +214,34 @@ namespace net.vieapps.Services.Books
 				var data = "";
 				using (var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding))
 				{
-					var body = await reader.ReadToEndAsync().ConfigureAwait(false);
-					data = body.ToExpandoObject().Get<string>("Data").ToArray().Last();
+					var body = (await reader.ReadToEndAsync().ConfigureAwait(false)).ToExpandoObject().Get<string>("Data").ToArray();
+					data = body.Last();
+					extension = body.First().ToArray(";").First().ToArray(":").Last();
+					extension = extension.IsEndsWith("png")
+						? "png"
+						: extension.IsEndsWith("bmp")
+							? "bmp"
+							: extension.IsEndsWith("gif")
+								? "gif"
+								: "jpg";
 				}
 
 				// write to file
-				await UtilityService.ExecuteTask(() => File.WriteAllBytes(path + name, Convert.FromBase64String(data)), cancellationToken).ConfigureAwait(false);
+				await UtilityService.ExecuteTask(() => File.WriteAllBytes(path + name + "." + extension, Convert.FromBase64String(data)), cancellationToken).ConfigureAwait(false);
 			}
 
 			// file
 			else
-				await UtilityService.ExecuteTask(() => context.Request.Files[0].SaveAs(path + name), cancellationToken).ConfigureAwait(false);
+			{
+				var file = context.Request.Files[0];
+				extension = Path.GetExtension(file.FileName);
+				await UtilityService.ExecuteTask(() => file.SaveAs(path + name + "." + extension), cancellationToken).ConfigureAwait(false);
+			}
 
 			// response
 			await context.Response.Output.WriteAsync((new JObject()
 			{
-				{ "Uri", Definitions.MediaUri + name }
+				{ "Uri", Definitions.MediaURI + name + "." + extension }
 			}).ToString(Newtonsoft.Json.Formatting.None)).ConfigureAwait(false);
 		}
 	}
