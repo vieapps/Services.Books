@@ -98,7 +98,7 @@ namespace net.vieapps.Services.Books
 			stopwatch.Start();
 			var logs = new List<string>() { $"Begin process ({requestInfo.Verb}): {requestInfo.URI}" };
 #if DEBUG || REQUESTLOGS
-			logs.Add($"Request ==> {requestInfo.ToJson().ToString(Formatting.Indented)}");
+			logs.Add($"Request:\r\n{requestInfo.ToJson().ToString(Formatting.Indented)}");
 #endif
 			await this.WriteLogsAsync(requestInfo.CorrelationID, logs).ConfigureAwait(false);
 
@@ -125,6 +125,12 @@ namespace net.vieapps.Services.Books
 					case "crawl":
 						var crawltask = Task.Run(async () => await this.CrawlBookAsync(requestInfo).ConfigureAwait(false)).ConfigureAwait(false);
 						return new JObject();
+
+					case "categories":
+						return this.GetStatisticsOfCategories();
+
+					case "authors":
+						return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
 				}
 				throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
 			}
@@ -936,7 +942,10 @@ namespace net.vieapps.Services.Books
 
 		JObject GetStatisticsOfAuthors(string @char)
 		{
-			var authors = Utility.Authors.Find(@char).ToList();
+			var authors = string.IsNullOrWhiteSpace(@char)
+				? Utility.Authors.List.OrderBy(item => item.FirstChar).OrderBy(item => item.Name).ToList()
+				: Utility.Authors.Find(@char).OrderBy(item => item.Name).ToList();
+
 			return new JObject()
 			{
 				{ "Total", authors.Count },
@@ -1497,7 +1506,7 @@ namespace net.vieapps.Services.Books
 
 				// file name & path
 				var filename = book.ID;
-				var filePath = book.GetFolderPath() + @"\";
+				var filePath = book.GetFolderPath() + Path.DirectorySeparatorChar.ToString();
 
 				// prepare HTML
 				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
@@ -1664,7 +1673,7 @@ namespace net.vieapps.Services.Books
 				UtilityService.WriteTextFile(filePath + filename + ".opf", content, false);
 
 				// generate MOBI
-				var generator = UtilityService.GetAppSetting("BookGenerator.Mobi", "VIEApps.Services.Books.Mobi.Generator.dll");
+				var generator = UtilityService.GetAppSetting("Books:MobiFileGenerator", "VIEApps.Services.Books.Mobi.Generator.dll");
 				var output = "";
 
 				UtilityService.RunProcess(generator, "\"" + filePath + filename + ".opf\"",
@@ -1969,7 +1978,7 @@ namespace net.vieapps.Services.Books
 				{
 					Type = "Books#Book",
 					DeviceID = "*",
-					Data = book.ToJson(false, (json) => json["TOCs"] = book.TOCs.ToJArray())
+					Data = book.ToJson(false, json => json["TOCs"] = book.TOCs.ToJArray())
 				}, cancellationToken)
 			).ConfigureAwait(false);
 		}
@@ -2041,7 +2050,8 @@ namespace net.vieapps.Services.Books
 						Utility.Authors.Add(new StatisticInfo()
 						{
 							Name = a,
-							Counters = 1
+							Counters = 1,
+							FirstChar = a.GetAuthorName().GetFirstChar().ToUpper()
 						});
 						var theAuthors = Utility.Status["Authors"];
 						if (theAuthors != null)

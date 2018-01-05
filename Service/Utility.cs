@@ -44,7 +44,7 @@ namespace net.vieapps.Services.Books
 		{
 			get
 			{
-				return Utility._Cache ?? (Utility._Cache = new Cache("VIEApps-Services-Books", Utility.CacheExpirationTime, UtilityService.GetAppSetting("Cache:Provider")));
+				return Utility._Cache ?? (Utility._Cache = new Cache(UtilityService.GetAppSetting("Books:CacheName","VIEApps-Services-Books"), Utility.CacheExpirationTime, UtilityService.GetAppSetting("Cache:Provider")));
 			}
 		}
 		#endregion
