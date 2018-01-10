@@ -315,6 +315,14 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				this.Title = UtilityService.RemoveTag(this.Title, "br").GetNormalized();
 				if (this.Title.Equals(this.Title.ToUpper()))
 					this.Title = this.Title.ToLower().GetNormalized();
+
+				if (this.Author.PositionOf("<br>") > 0)
+				{
+					var data = this.Author.ToArray("<br>");
+					for (var index = 0; index < data.Length - 2; index++)
+						this.Title += " " + data[index];
+					this.Author = data.Last();
+				}
 			}
 
 			// book ID

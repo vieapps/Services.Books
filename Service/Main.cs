@@ -513,7 +513,11 @@ namespace net.vieapps.Services.Books
 
 				// update TOCs
 				if (tocs.Length.Equals(bookJson.TOCs.Count))
+				{
 					bookJson.TOCs = tocs.ToList();
+					for (var index = 0; index < bookJson.Chapters.Count; index++)
+						bookJson.Chapters[index] = "<h1>" + bookJson.TOCs[index] + "</h1>" + bookJson.Chapters[index].Substring(bookJson.Chapters[index].PositionOf("</h1>") + 5);
+				}
 				else
 					tocs = bookJson.TOCs.ToArray();
 
