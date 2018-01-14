@@ -41,6 +41,7 @@
     <Compile Include="Main.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Crawler.cs" />
+    <Compile Include="EventHandlers.cs" />
     <Compile Include="Utility.cs" />
   </ItemGroup>
   <ItemGroup>

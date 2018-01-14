@@ -60,7 +60,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						this.WriteLog(UtilityService.NewUID, "Error occurred while preparing the folders of the service", ex);
+						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
 					}
 
 				// register timers
@@ -87,9 +87,9 @@ namespace net.vieapps.Services.Books
 			if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
 				Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
 		}
-		#endregion
 
-		public override string ServiceName { get { return "books"; } }
+		public override string ServiceName { get { return "Books"; } }
+		#endregion
 
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
@@ -338,13 +338,13 @@ namespace net.vieapps.Services.Books
 				if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
 				{
 					book.SourceUrl = bookJson.SourceUrl;
-					await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+					await Book.UpdateAsync(book, true, cancellationToken).ConfigureAwait(false);
 				}
 
 				if (!book.TotalChapters.Equals(bookJson.Chapters.Count))
 				{
 					book.TotalChapters = bookJson.Chapters.Count;
-					await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+					await Book.UpdateAsync(book, true, cancellationToken).ConfigureAwait(false);
 				}
 			}
 
@@ -450,7 +450,7 @@ namespace net.vieapps.Services.Books
 				}
 
 				// update database
-				await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+				await Book.UpdateAsync(book, true, cancellationToken).ConfigureAwait(false);
 			}
 
 			// return data
@@ -570,7 +570,7 @@ namespace net.vieapps.Services.Books
 
 			// update database
 			book.LastUpdated = DateTime.Now;
-			await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+			await Book.UpdateAsync(book, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
 
 			// update statistics
 			if (!category.IsEquals(book.Category))
@@ -654,7 +654,7 @@ namespace net.vieapps.Services.Books
 			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
 
 			// delete from database
-			await Book.DeleteAsync<Book>(book.ID, cancellationToken).ConfigureAwait(false);
+			await Book.DeleteAsync<Book>(book.ID, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
 
 			// move files
 			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
@@ -1142,10 +1142,8 @@ namespace net.vieapps.Services.Books
 				throw new InformationNotFoundException();
 
 			// update
-			account.CopyFrom(requestInfo.GetBodyJson());
-			account.ID = id;
-
-			await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
+			account.CopyFrom(requestInfo.GetBodyJson(), "ID,Title".ToHashSet(), _ => account.Title = null);
+			await Account.UpdateAsync(account, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
 			return account.ToJson();
 		}
 		#endregion
@@ -1747,7 +1745,7 @@ namespace net.vieapps.Services.Books
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
-					await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
+					await Account.UpdateAsync(account, true, cancellationToken).ConfigureAwait(false);
 
 					return new JObject()
 					{
@@ -1765,7 +1763,7 @@ namespace net.vieapps.Services.Books
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
-					await Account.UpdateAsync(account, cancellationToken).ConfigureAwait(false);
+					await Account.UpdateAsync(account, true, cancellationToken).ConfigureAwait(false);
 
 					var data = new JObject()
 					{
@@ -2016,7 +2014,7 @@ namespace net.vieapps.Services.Books
 		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var authors = book.Author.GetAuthorNames();
+			var authors = (book.Author ?? "").GetAuthorNames();
 
 			// update statistic on deleted
 			if (isDeleted)

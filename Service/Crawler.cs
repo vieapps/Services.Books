@@ -305,7 +305,7 @@ namespace net.vieapps.Services.Books
 			{
 				book.CopyFrom(json, "ID".ToHashSet());
 				book.LastUpdated = DateTime.Now;
-				await Book.UpdateAsync(book, cancellationToken).ConfigureAwait(false);
+				await Book.UpdateAsync(book, UtilityService.GetAppSetting("Users:SystemAccountID", "VIEAppsNGX-MMXVII-System-Account"), cancellationToken).ConfigureAwait(false);
 			}
 			else
 			{

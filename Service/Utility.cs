@@ -5,8 +5,11 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using MongoDB.Bson.Serialization.Attributes;
 
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Caching;
@@ -473,7 +476,16 @@ namespace net.vieapps.Services.Books
 
 	//  --------------------------------------------------------------------------------------------
 
-	[Serializable]
-	[Repository]
-	public abstract class Repository<T> : RepositoryBase<T> where T : class { }
+	[Serializable, Repository]
+	public abstract class Repository<T> : RepositoryBase<T> where T : class
+	{
+		/// <summary>
+		/// Gets the name of the service that associates with this repository
+		/// </summary>
+		[JsonIgnore, XmlIgnore, BsonIgnore, Ignore]
+		public override string ServiceName
+		{
+			get { return "Books"; }
+		}
+	}
 }

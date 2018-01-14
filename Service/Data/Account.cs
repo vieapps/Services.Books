@@ -16,6 +16,7 @@ using net.vieapps.Components.Utility;
 
 namespace net.vieapps.Services.Books
 {
+	[Serializable]
 	public enum Level
 	{
 		Normal,
@@ -25,6 +26,7 @@ namespace net.vieapps.Services.Books
 		Diamond
 	}
 
+	[Serializable]
 	public enum Reputation
 	{
 		Unknown,
