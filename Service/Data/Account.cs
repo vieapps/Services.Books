@@ -36,7 +36,7 @@ namespace net.vieapps.Services.Books
 	}
 
 	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}")]
-	[Entity(CollectionName = "Accounts", TableName = "T_Books_Accounts", CacheStorageType = typeof(Utility), CacheStorageName = "Cache", Searchable = true)]
+	[Entity(CollectionName = "Accounts", TableName = "T_Books_Accounts", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Account : Repository<Account>
 	{
 		public Account() : base()

@@ -18,7 +18,7 @@ namespace net.vieapps.Services.Books
 	[EventHandlers]
 	public class EventHandlers: IPostGetHandler
 	{
-		public void OnPostGet(RepositoryContext context, object @object)
+		public void OnPostGet<T>(RepositoryContext context, T @object) where T : class
 		{
 			if (@object is Book)
 			{
@@ -26,11 +26,11 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		public Task OnPostGetAsync(RepositoryContext context, object @object, CancellationToken cancellationToken)
+		public Task OnPostGetAsync<T>(RepositoryContext context, T @object, CancellationToken cancellationToken) where T : class
 		{
 			if (@object is Book)
 			{
-
+				
 			}
 			return Task.CompletedTask;
 		}
