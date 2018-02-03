@@ -93,16 +93,6 @@ namespace net.vieapps.Services.Books
 
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			// track
-			var stopwatch = new Stopwatch();
-			stopwatch.Start();
-			var logs = new List<string>() { $"Begin process ({requestInfo.Verb}): {requestInfo.URI}" };
-#if DEBUG || REQUESTLOGS
-			logs.Add($"Request:\r\n{requestInfo.ToJson().ToString(Formatting.Indented)}");
-#endif
-			await this.WriteLogsAsync(requestInfo.CorrelationID, logs).ConfigureAwait(false);
-
-			// process
 			try
 			{
 				switch (requestInfo.ObjectName.ToLower())
@@ -131,18 +121,15 @@ namespace net.vieapps.Services.Books
 
 					case "authors":
 						return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+
+					default:
+						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
 				}
-				throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
 			}
 			catch (Exception ex)
 			{
 				await this.WriteLogAsync(requestInfo.CorrelationID, "Error occurred while processing", ex).ConfigureAwait(false);
 				throw this.GetRuntimeException(requestInfo, ex);
-			}
-			finally
-			{
-				stopwatch.Stop();
-				await this.WriteLogAsync(requestInfo.CorrelationID, $"End process - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 			}
 		}
 
@@ -150,7 +137,7 @@ namespace net.vieapps.Services.Books
 		{
 			var role = this.GetPrivilegeRole(user);
 			return "book,category,statistic,profile".ToList()
-				.Select(o => new Privilege(this.ServiceName, o, null, role))
+				.Select(objName => new Privilege(this.ServiceName, objName, null, role))
 				.ToList();
 		}
 
@@ -1739,9 +1726,9 @@ namespace net.vieapps.Services.Books
 						account.Bookmarks.Add(bookmark.FromJson<Account.Bookmark>());
 
 					account.Bookmarks = account.Bookmarks
-						.OrderByDescending(b => b.Time)
 						.Distinct(new Account.BookmarkComparer())
 						.Where(b => Book.Get<Book>(b.ID) != null)
+						.OrderByDescending(b => b.Time)
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
@@ -1757,9 +1744,9 @@ namespace net.vieapps.Services.Books
 				case "DELETE":
 					var id = requestInfo.GetObjectIdentity();
 					account.Bookmarks = account.Bookmarks
-						.Where(b => !b.ID.IsEquals(id))
-						.OrderByDescending(b => b.Time)
 						.Distinct(new Account.BookmarkComparer())
+						.Where(b => !b.ID.IsEquals(id) && Book.Get<Book>(b.ID) != null)
+						.OrderByDescending(b => b.Time)
 						.Take(30)
 						.ToList();
 					account.LastSync = DateTime.Now;
@@ -1788,7 +1775,7 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Process inter-communicate messages
-		protected override void ProcessInterCommunicateMessage(CommunicateMessage message)
+		protected override async Task ProcessInterCommunicateMessageAsync(CommunicateMessage message)
 		{
 			// prepare
 			var data = message.Data?.ToExpandoObject();
@@ -1802,15 +1789,12 @@ namespace net.vieapps.Services.Books
 					var book = Book.Get<Book>(data.Get<string>("BookID"));
 					if (book != null)
 					{
-						Task.Run(async () =>
+						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString()).ConfigureAwait(false);
+						await this.SendUpdateMessageAsync(new UpdateMessage()
 						{
-							var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString()).ConfigureAwait(false);
-							await this.SendUpdateMessageAsync(new UpdateMessage()
-							{
-								DeviceID = "*",
-								Type = "Books#Book#Counters",
-								Data = result
-							});
+							DeviceID = "*",
+							Type = "Books#Book#Counters",
+							Data = result
 						}).ConfigureAwait(false);
 					}
 #if DEBUG
