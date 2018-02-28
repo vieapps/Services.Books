@@ -64,12 +64,11 @@ namespace net.vieapps.Services.Books
 				var stopwatch = new Stopwatch();
 				stopwatch.Start();
 
-				var tasks = new List<Task>();
-				if ("true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")))
-					tasks.Add(this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken));
-				if ("true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")))
-					tasks.Add(this.RunCrawlerOfISachAsync(onUpdate, cancellationToken));
-				await Task.WhenAll(tasks).ConfigureAwait(false);
+				await Task.WhenAll(new List<Task>()
+				{
+					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken) : Task.CompletedTask,
+					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunCrawlerOfISachAsync(onUpdate, cancellationToken) : Task.CompletedTask
+				}).ConfigureAwait(false);
 
 				stopwatch.Stop();
 				onCompleted?.Invoke(stopwatch.ElapsedMilliseconds);
@@ -104,7 +103,7 @@ namespace net.vieapps.Services.Books
 				var bookshelfParser = new Parsers.Bookshelfs.VnThuQuan().Initialize();
 				while (bookshelfParser.CurrentPage <= this.MaxPages)
 				{
-					this.AddLogs($"Start to crawl the bookshelf of VnThuQuan.net - Page number: {bookshelfParser.CurrentPage}");
+					this.AddLogs($"Start to crawl the bookshelf of VnThuQuan.net [{bookshelfParser.UrlPattern?.Replace("{0}", bookshelfParser.CurrentPage.ToString())}]");
 					await bookshelfParser.ParseAsync(
 						(p, times) => this.AddLogs($"The page {p.CurrentPage} of VnThuQuan.net's bookshelf is completed - Execution times: {times.GetElapsedTimes()}"),
 						(p, ex) => this.AddLogs($"Error occurred while crawling the bookshelf of VnThuQuan.net - Page number: {p.CurrentPage}", ex),
@@ -185,10 +184,10 @@ namespace net.vieapps.Services.Books
 					await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
 
 					// crawl
-					this.AddLogs($"Start to crawl the bookshelf of ISach.info - Page number: {bookshelfParser.CurrentPage} ({bookshelfParser.Category + (bookshelfParser.Char != null ? " [" + bookshelfParser.Char + "]" : "")})");
+					this.AddLogs($"Start to crawl the bookshelf of ISach.info [{bookshelfParser.UrlPattern?.Replace("{0}", bookshelfParser.CurrentPage.ToString())}]");
 					await bookshelfParser.ParseAsync(
-						(p, times) => this.AddLogs($"The page {p.CurrentPage} of ISach.info ({p.Category + (p.Char != null ? " [" + p.Char + "]" : "")}) is completed - Execution times: {times.GetElapsedTimes()}"),
-						(p, ex) => this.AddLogs($"Error occurred while crawling the page {p.CurrentPage} of ISach.info ({p.Category + (p.Char != null ? " [" + p.Char + "]" : "")})", ex),
+						(p, times) => this.AddLogs($"The page {p.CurrentPage} of ISach.info is completed - Execution times: {times.GetElapsedTimes()}"),
+						(p, ex) => this.AddLogs($"Error occurred while crawling the page {p.CurrentPage} of ISach.info", ex),
 						cancellationToken
 					).ConfigureAwait(false);
 

@@ -56,10 +56,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// parse to get details
-				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
-				{
-					this.ParseBook(html);
-				}
+				await UtilityService.ExecuteTask(() => this.ParseBook(html), cancellationToken).ConfigureAwait(false);
 
 				// permanent identity
 				if (string.IsNullOrWhiteSpace(this.PermanentID) || !this.PermanentID.IsValidUUID())

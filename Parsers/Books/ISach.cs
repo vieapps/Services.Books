@@ -61,7 +61,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					throw new AccessDeniedException("Access Denied => Phải đăng nhập");
 
 				// parse the book to get details
-				await this.ParseBookAsync(html, cancellationToken);
+				await this.ParseBookAsync(html, cancellationToken).ConfigureAwait(false);
 
 				// permanent identity
 				if (string.IsNullOrWhiteSpace(this.PermanentID) || !this.PermanentID.IsValidUUID())

@@ -95,9 +95,12 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			{
 				this.TotalPages = 0;
 				this.CurrentPage = 0;
+				this.UrlPattern = "http://isach.info/mobile/most_reading.php?sort=last_update_date";
 			}
 			else if (this.CurrentPage >= this.TotalPages)
 			{
+				this.UrlPattern = null;
+				/*
 				this.TotalPages = 0;
 				this.CurrentPage = 0;
 				var index = ISach.Categories.IndexOf(this.Category);
@@ -126,21 +129,26 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				this.Char = string.IsNullOrWhiteSpace(this.Category)
 					? null
 					: string.IsNullOrWhiteSpace(this.Char) && ISach.LargeCategories.Contains(this.Category) ? "0" : this.Char;
+				*/
 			}
 
 			this.CurrentPage++;
 
+			/*
 			this.UrlPattern = string.IsNullOrWhiteSpace(this.Category)
 				? null
 				: string.IsNullOrWhiteSpace(this.Char)
 					? "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&page={1}"
 					: "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&char={1}&page={2}";
+			*/
 
 			this.UrlParameters = new List<string>();
+			/*
 			if (!string.IsNullOrWhiteSpace(this.Category))
 				this.UrlParameters.Add(this.Category);
 			if (!string.IsNullOrWhiteSpace(this.Char))
 				this.UrlParameters.Add(this.Char);
+			*/
 			this.UrlParameters.Add(this.CurrentPage.ToString());
 
 			return this;
@@ -170,10 +178,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			}
 
 			// parse
-			using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
-			{
-				this.Parse(html);
-			}
+			await this.ParseAsync(html, cancellationToken).ConfigureAwait(false);
 
 			// callback when done
 			stopwatch.Stop();
@@ -181,7 +186,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			return this;
 		}
 
-		void Parse(string html)
+		async Task ParseAsync(string html, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// pages
 			int start = -1, end = -1;
@@ -211,11 +216,41 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				}
 				else if (html.PositionOf("paging_box_empty") > 0)
 					this.TotalPages = 1;
+				else
+					this.TotalPages = 1;
 			}
 
 			// books
 			this.BookParsers = new List<IBookParser>();
 
+			start = html.PositionOf("<div class='ms_list_item'>", start + 1);
+			start = start < 0 ? -1 : html.PositionOf("<div class='ms_list_item'>", start + 1);
+			end = start < 0 ? -1 : html.PositionOf("<div class='ms_quote'", start + 1);
+			html = start > 0 && end > 0 ? html.Substring(start, end - start) : "";
+
+			start = html.PositionOf("<div class='ms_list_item'>");
+			start = html.PositionOf("<a", start + 1) > -1 ? start : -1;
+			while (start > -1)
+			{
+				start = html.PositionOf("<a", start + 1);
+				end = html.PositionOf(">", start + 1);
+				if (html.Substring(start, end - start).PositionOf("story.php") < 0)
+					start = html.PositionOf("<a", start + 1);
+				start = html.PositionOf("href=\"", start + 1) + 6;
+				end = html.PositionOf("\"", start + 1);
+
+				try
+				{
+					await Task.Delay(UtilityService.GetRandomNumber(123, 456), cancellationToken).ConfigureAwait(false);
+					var book = await new Parsers.Books.ISach().ParseAsync("http://isach.info" + html.Substring(start, end - start).Trim(), null, null, cancellationToken).ConfigureAwait(false);
+					this.BookParsers.Add(book);
+				}
+				catch { }
+
+				start = html.PositionOf("<div class='ms_list_item'>", start + 1);
+			}
+
+			/*
 			start = html.PositionOf("story_content_list");
 			start = start < 0 ? -1 : html.PositionOf("<div class='ms_list_item'>", start + 1);
 			end = start < 0 ? -1 : html.PositionOf("<div class='paging_box_bottom'>", start + 1);
@@ -256,6 +291,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 				start = html.PositionOf("<div class='ms_list_item'>", start + 1);
 			}
+			*/
 		}
 	}
 }

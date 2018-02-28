@@ -60,7 +60,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
+						await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
 					}
 
 				// register timers
@@ -74,7 +74,7 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while running the next action", ex).ConfigureAwait(false);
+						await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while running the next action", ex).ConfigureAwait(false);
 					}
 			});
 		}
@@ -204,7 +204,7 @@ namespace net.vieapps.Services.Books
 				: "";
 
 			var json = !cacheKey.Equals("")
-				? await Utility.Cache.GetAsync<string>(cacheKey + ":" + pageNumber.ToString() + "-json").ConfigureAwait(false)
+				? await Utility.Cache.GetAsync<string>($"{cacheKey}:{pageNumber}-json").ConfigureAwait(false)
 				: "";
 
 			if (!string.IsNullOrWhiteSpace(json))
@@ -213,11 +213,8 @@ namespace net.vieapps.Services.Books
 			// prepare pagination
 			var totalRecords = pagination.Item1 > -1
 				? pagination.Item1
-				: -1;
-
-			if (totalRecords < 0)
-				totalRecords = string.IsNullOrWhiteSpace(query)
-					? await Book.CountAsync(filter, cacheKey + "-total", cancellationToken).ConfigureAwait(false)
+				: string.IsNullOrWhiteSpace(query)
+					? await Book.CountAsync(filter, $"{cacheKey}-total", cancellationToken).ConfigureAwait(false)
 					: await Book.CountByQueryAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
 			var pageSize = pagination.Item3;
@@ -229,7 +226,7 @@ namespace net.vieapps.Services.Books
 			// search
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
-					? await Book.FindAsync(filter, sort, pageSize, pageNumber, cacheKey + ":" + pageNumber.ToString(), cancellationToken).ConfigureAwait(false)
+					? await Book.FindAsync(filter, sort, pageSize, pageNumber, $"{cacheKey}:{pageNumber}", cancellationToken).ConfigureAwait(false)
 					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
 				: new List<Book>();
 
@@ -252,7 +249,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAsync(cacheKey + ":" + pageNumber.ToString() + "-json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
+				await Utility.Cache.SetAsync($"{cacheKey}:{pageNumber}-json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
 			}
 
 			// return the result
@@ -265,14 +262,8 @@ namespace net.vieapps.Services.Books
 			{
 				var filter = Filters<Book>.NotEquals("Status", "Inactive");
 				var sort = Sorts<Book>.Descending("LastUpdated");
-				await this.SendUpdateMessagesAsync((await Book.FindAsync(filter, sort, 20, 1, this.GetCacheKey<Book>(filter, sort) + ":1", this.CancellationTokenSource.Token).ConfigureAwait(false))
-					.Select(book => new BaseMessage()
-					{
-						Type = "Books#Book",
-						Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray())
-					})
-					.ToList(),
-					"*", null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+				var books = await Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey<Book>(filter, sort)}:1", this.CancellationTokenSource.Token).ConfigureAwait(false);
+				await this.SendUpdateMessagesAsync(books.Select(book => new BaseMessage() { Type = "Books#Book#Update", Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray()) }).ToList(), "*", null, this.CancellationTokenSource.Token).ConfigureAwait(false);
 			}
 			catch { }
 		}
@@ -687,7 +678,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// prepare
-			var correlationID = UtilityService.NewUID;
+			var correlationID = UtilityService.NewUUID;
 			var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
@@ -777,7 +768,7 @@ namespace net.vieapps.Services.Books
 						: null;
 
 			// crawl
-			var correlationID = UtilityService.NewUID;
+			var correlationID = UtilityService.NewUUID;
 			if (parser != null)
 				try
 				{
@@ -907,7 +898,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(UtilityService.NewUID, "Error occurred while sending an update message of statistics", ex).ConfigureAwait(false);
+				await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while sending an update message of statistics", ex).ConfigureAwait(false);
 			}
 		}
 		#endregion
@@ -1018,7 +1009,7 @@ namespace net.vieapps.Services.Books
 			await this.SendStatisticsAsync().ConfigureAwait(false);
 
 			stopwatch.Stop();
-			await this.WriteLogAsync(UtilityService.NewUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
+			await this.WriteLogAsync(UtilityService.NewUUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 		}
 		#endregion
 
@@ -1214,7 +1205,7 @@ namespace net.vieapps.Services.Books
 				await Utility.Cache.SetAsync(flag, book.ID).ConfigureAwait(false);
 
 				// prepare
-				var correlationID = UtilityService.NewUID;
+				var correlationID = UtilityService.NewUUID;
 				var status = new Dictionary<string, bool>()
 				{
 					{ "epub",  File.Exists(filePath + ".epub") },
@@ -1706,8 +1697,10 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
+			// get related account
 			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 
+			// process bookmarks
 			switch (requestInfo.Verb)
 			{
 				// get bookmarks
@@ -1759,19 +1752,19 @@ namespace net.vieapps.Services.Books
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
-					await (await this.GetSessionsAsync(requestInfo).ConfigureAwait(false))
-						.Where(session => session.Item4)
-						.ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage()
-						{
-							Type = "Books#Bookmarks",
-							DeviceID = session.Item2,
-							Data = data
-						}, token), cancellationToken).ConfigureAwait(false);
+					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
+					await sessions.Where(session => session.Item4).ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage()
+					{
+						Type = "Books#Bookmarks",
+						DeviceID = session.Item2,
+						Data = data
+					}, token), cancellationToken).ConfigureAwait(false);
 
 					return data;
-			}
 
-			throw new MethodNotAllowedException(requestInfo.Verb);
+				default:
+					throw new MethodNotAllowedException(requestInfo.Verb);
+			}
 		}
 
 		#region Process inter-communicate messages
@@ -1786,7 +1779,7 @@ namespace net.vieapps.Services.Books
 			if (message.Type.IsEquals("Download") && !string.IsNullOrWhiteSpace(data.Get<string>("UserID")) && !string.IsNullOrWhiteSpace(data.Get<string>("BookID")))
 				try
 				{
-					var book = Book.Get<Book>(data.Get<string>("BookID"));
+					var book = await Book.GetAsync<Book>(data.Get<string>("BookID")).ConfigureAwait(false);
 					if (book != null)
 					{
 						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString()).ConfigureAwait(false);
@@ -1798,12 +1791,12 @@ namespace net.vieapps.Services.Books
 						}).ConfigureAwait(false);
 					}
 #if DEBUG
-					this.WriteLog(UtilityService.NewUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
+					this.WriteLog(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
 #endif
 				}
 				catch (Exception ex)
 				{
-					this.WriteLog(UtilityService.NewUID, "Error occurred while updating counters", ex);
+					await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while updating counters", ex).ConfigureAwait(false);
 				}
 		}
 		#endregion
@@ -1887,7 +1880,7 @@ namespace net.vieapps.Services.Books
 				if (this.IsCrawlerRunning)
 					return;
 
-				this.Crawler.CorrelationID = UtilityService.NewUID;
+				this.Crawler.CorrelationID = UtilityService.NewUUID;
 				this.WriteLog(this.Crawler.CorrelationID, "Start the crawler");
 				this.IsCrawlerRunning = true;
 				this.Crawler.Start(
@@ -1940,7 +1933,7 @@ namespace net.vieapps.Services.Books
 			if ("true".IsEquals(recomputeStatisticsAtStartup))
 				Task.Run(async () =>
 				{
-					var correlationID = UtilityService.NewUID;
+					var correlationID = UtilityService.NewUUID;
 					try
 					{
 						await this.WriteLogAsync(correlationID, "Start to re-compute statistics").ConfigureAwait(false);
@@ -1962,7 +1955,7 @@ namespace net.vieapps.Services.Books
 				this.ClearRelatedCacheAsync(book),
 				this.SendUpdateMessageAsync(new UpdateMessage()
 				{
-					Type = "Books#Book",
+					Type = "Books#Book#Update",
 					DeviceID = "*",
 					Data = book.ToJson(false, json => json["TOCs"] = book.TOCs.ToJArray())
 				}, cancellationToken)
@@ -1977,7 +1970,7 @@ namespace net.vieapps.Services.Books
 				var sort = Sorts<Book>.Descending("LastUpdated");
 
 				await Task.WhenAll(
-					Utility.Cache.RemoveAsync(book.GetCacheKey() + "-json"),
+					Utility.Cache.RemoveAsync($"{book.GetCacheKey()}-json"),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, filter, sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
@@ -1991,7 +1984,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(UtilityService.NewUID, $"Error occurred while clearing related cached of a book [{book.Title}]", ex).ConfigureAwait(false);
+				await this.WriteLogAsync(UtilityService.NewUUID, $"Error occurred while clearing related cached of a book [{book.Title}]", ex).ConfigureAwait(false);
 			}
 		}
 
