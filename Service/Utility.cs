@@ -258,7 +258,7 @@ namespace net.vieapps.Services.Books
 
 		public static Book GetBook(this Book book)
 		{
-			var key = book.GetCacheKey() + "-json";
+			var key = book.GetCacheKey() + ":json";
 			var full = Utility.Cache.Get<Book>(key);
 			if (full == null)
 			{
@@ -272,7 +272,7 @@ namespace net.vieapps.Services.Books
 
 		public static async Task<Book> GetBookAsync(this Book book)
 		{
-			var key = book.GetCacheKey() + "-json";
+			var key = book.GetCacheKey() + ":json";
 			var full = await Utility.Cache.GetAsync<Book>(key).ConfigureAwait(false);
 			if (full == null)
 			{
@@ -483,9 +483,6 @@ namespace net.vieapps.Services.Books
 		/// Gets the name of the service that associates with this repository
 		/// </summary>
 		[JsonIgnore, XmlIgnore, BsonIgnore, Ignore]
-		public override string ServiceName
-		{
-			get { return "Books"; }
-		}
+		public override string ServiceName => ServiceBase.ServiceComponent.ServiceName;
 	}
 }

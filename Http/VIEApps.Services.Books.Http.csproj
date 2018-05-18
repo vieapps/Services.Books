@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <AssemblyName>VIEApps.Services.Books</AssemblyName>
-    <AssemblyTitle>VIEApps NGX Books</AssemblyTitle>
+    <AssemblyName>VIEApps.Services.Books.Http</AssemblyName>
+    <AssemblyTitle>VIEApps NGX Books HTTP File Handler</AssemblyTitle>
     <Authors>VIEApps.net</Authors>
     <Company>VIEApps.net</Company>
     <Product>VIEApps NGX</Product>
@@ -27,12 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="VIEApps.Components.Utility.Epub" Version="10.2.2.1806" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Base\VIEApps.Services.Base.csproj" />
-    <ProjectReference Include="..\Parsers\VIEApps.Services.Books.Parsers.csproj" />
+    <ProjectReference Include="..\..\Base.Http\VIEApps.Services.Base.Http.csproj" />
+    <ProjectReference Include="..\Service\VIEApps.Services.Books.csproj" />
   </ItemGroup>
 
 </Project>

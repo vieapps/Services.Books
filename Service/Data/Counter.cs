@@ -30,7 +30,7 @@ namespace net.vieapps.Services.Books
 
 		public JObject ToJson(bool removeType = false)
 		{
-			var json = this.ToJson<CounterBase>() as JObject;
+			var json = this.ToJson(null) as JObject;
 			if (removeType)
 				json.Remove("Type");
 			return json;
@@ -56,7 +56,7 @@ namespace net.vieapps.Services.Books
 
 		public new JObject ToJson(bool removeType = false)
 		{
-			var json = this.ToJson<CounterInfo>() as JObject;
+			var json = this.ToJson(null) as JObject;
 			if (removeType)
 				json.Remove("Type");
 			return json;

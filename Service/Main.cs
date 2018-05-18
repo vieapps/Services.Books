@@ -12,9 +12,9 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-using net.vieapps.Components.Utility;
 using net.vieapps.Components.Security;
 using net.vieapps.Components.Repository;
+using net.vieapps.Components.Utility;
 #endregion
 
 namespace net.vieapps.Services.Books
@@ -23,9 +23,7 @@ namespace net.vieapps.Services.Books
 	{
 
 		#region Constructor & Destructor
-		public ServiceComponent() : base()
-		{
-		}
+		public ServiceComponent() : base() { }
 
 		public override void Dispose()
 		{
@@ -38,10 +36,12 @@ namespace net.vieapps.Services.Books
 		{
 			this.Dispose();
 		}
+
+		public override string ServiceName => "Books";
 		#endregion
 
 		#region Start
-		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> next = null)
+		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
 		{
 			base.Start(args, initializeRepository, async (service) =>
 			{
@@ -60,21 +60,21 @@ namespace net.vieapps.Services.Books
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
+						await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
 					}
 
 				// register timers
 				this.RegisterTimers(args);
 
 				// last action
-				if (next != null)
+				if (nextAsync != null)
 					try
 					{
-						await next(service).ConfigureAwait(false);
+						await nextAsync(service).ConfigureAwait(false);
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while running the next action", ex).ConfigureAwait(false);
+						await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while invoking the next action", ex).ConfigureAwait(false);
 					}
 			});
 		}
@@ -87,69 +87,81 @@ namespace net.vieapps.Services.Books
 			if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
 				Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
 		}
-
-		public override string ServiceName { get { return "Books"; } }
 		#endregion
 
 		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
+			var stopwatch = Stopwatch.StartNew();
+			this.Logger.LogInformation($"Begin request ({requestInfo.Verb} {requestInfo.URI}) [{requestInfo.CorrelationID}]");
 			try
 			{
+				JObject json = null;
 				switch (requestInfo.ObjectName.ToLower())
 				{
 					case "book":
-						return await this.ProcessBookAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						json = await this.ProcessBookAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						break;
 
 					case "statistic":
-						return await this.ProcessStatisticAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						json = await this.ProcessStatisticAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						break;
 
 					case "profile":
-						return await this.ProcessProfileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						json = await this.ProcessProfileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						break;
 
 					case "file":
-						return await this.ProcessFileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						json = await this.ProcessFileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						break;
 
 					case "bookmarks":
-						return await this.ProcessBookmarksAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						json = await this.ProcessBookmarksAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+						break;
 
 					case "crawl":
-						var crawltask = Task.Run(async () => await this.CrawlBookAsync(requestInfo).ConfigureAwait(false)).ConfigureAwait(false);
-						return new JObject();
+						var crawltask = Task.Run(() => this.CrawlBookAsync(requestInfo)).ConfigureAwait(false);
+						json = new JObject();
+						break;
 
 					case "categories":
-						return this.GetStatisticsOfCategories();
+						json = this.GetStatisticsOfCategories();
+						break;
 
 					case "authors":
-						return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+						json = this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+						break;
 
 					default:
 						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
 				}
+				stopwatch.Stop();
+				this.Logger.LogInformation($"Success response - Execution times: {stopwatch.GetElapsedTimes()} [{requestInfo.CorrelationID}]");
+				if (this.IsDebugResultsEnabled)
+					this.Logger.LogInformation(
+						$"- Request: {requestInfo.ToJson().ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
+						$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
+					);
+				return json;
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(requestInfo.CorrelationID, "Error occurred while processing", ex).ConfigureAwait(false);
-				throw this.GetRuntimeException(requestInfo, ex);
+				throw this.GetRuntimeException(requestInfo, ex, stopwatch);
 			}
 		}
 
-		protected override List<Privilege> GetPrivileges(User user, Privileges privileges)
-		{
-			var role = this.GetPrivilegeRole(user);
-			return "book,category,statistic,profile".ToList()
-				.Select(objName => new Privilege(this.ServiceName, objName, null, role))
+		protected override List<Privilege> GetPrivileges(IUser user, Privileges privileges)
+			=> "book,category,statistic,profile".ToList()
+				.Select(objName => new Privilege(this.ServiceName, objName, null, this.GetPrivilegeRole(user)))
 				.ToList();
-		}
 
 		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			switch (requestInfo.Verb)
 			{
 				case "GET":
-					if ("search".IsEquals(requestInfo.GetObjectIdentity()))
-						return this.SearchBooksAsync(requestInfo, cancellationToken);
-					else
-						return this.GetBookAsync(requestInfo, cancellationToken);
+					return "search".IsEquals(requestInfo.GetObjectIdentity())
+						? this.SearchBooksAsync(requestInfo, cancellationToken)
+						: this.GetBookAsync(requestInfo, cancellationToken);
 
 				case "POST":
 					return this.CreateBookAsync(requestInfo, cancellationToken);
@@ -159,9 +171,10 @@ namespace net.vieapps.Services.Books
 
 				case "DELETE":
 					return this.DeleteBookAsync(requestInfo, cancellationToken);
-			}
 
-			throw new MethodNotAllowedException(requestInfo.Verb);
+				default:
+					return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
+			}
 		}
 
 		#region Search books
@@ -204,7 +217,7 @@ namespace net.vieapps.Services.Books
 				: "";
 
 			var json = !cacheKey.Equals("")
-				? await Utility.Cache.GetAsync<string>($"{cacheKey}:{pageNumber}-json").ConfigureAwait(false)
+				? await Utility.Cache.GetAsync<string>($"{cacheKey }{pageNumber}:json").ConfigureAwait(false)
 				: "";
 
 			if (!string.IsNullOrWhiteSpace(json))
@@ -214,7 +227,7 @@ namespace net.vieapps.Services.Books
 			var totalRecords = pagination.Item1 > -1
 				? pagination.Item1
 				: string.IsNullOrWhiteSpace(query)
-					? await Book.CountAsync(filter, $"{cacheKey}-total", cancellationToken).ConfigureAwait(false)
+					? await Book.CountAsync(filter, $"{cacheKey}total", cancellationToken).ConfigureAwait(false)
 					: await Book.CountByQueryAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
 			var pageSize = pagination.Item3;
@@ -226,7 +239,7 @@ namespace net.vieapps.Services.Books
 			// search
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
-					? await Book.FindAsync(filter, sort, pageSize, pageNumber, $"{cacheKey}:{pageNumber}", cancellationToken).ConfigureAwait(false)
+					? await Book.FindAsync(filter, sort, pageSize, pageNumber, $"{cacheKey}{pageNumber}", cancellationToken).ConfigureAwait(false)
 					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
 				: new List<Book>();
 
@@ -249,7 +262,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAsync($"{cacheKey}:{pageNumber}-json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
+				await Utility.Cache.SetAsync($"{cacheKey }{pageNumber}:json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
 			}
 
 			// return the result
@@ -420,7 +433,7 @@ namespace net.vieapps.Services.Books
 					if (downloadCounter != null)
 					{
 						if (!downloadCounter.LastUpdated.IsInCurrentWeek())
-							downloadCounter.Week =  0;
+							downloadCounter.Week = 0;
 						if (!downloadCounter.LastUpdated.IsInCurrentMonth())
 							downloadCounter.Month = 0;
 						downloadCounter.LastUpdated = DateTime.Now;
@@ -596,12 +609,12 @@ namespace net.vieapps.Services.Books
 
 #if DEBUG || UPDATELOGS
 			body.Remove("Cover");
-			await this.WriteLogsAsync(requestInfo, new List<string>()
+			await this.WriteLogsAsync(requestInfo.CorrelationID, new List<string>()
 			{
 				$"Update a book [{book.Name}]",
 				$"Request =>\r\n{body.ToJObject().ToString(Formatting.Indented)}",
 				$"Be deleted files (be moved into trash): {(beDeletedFiles.Count < 1 ? "None" : beDeletedFiles.Count + " file(s)\r\n" + string.Join("\r\n=> ", beDeletedFiles.Select(file => file.FullName)))}"
-			}, null, cancellationToken);
+			});
 #endif
 
 			// return
@@ -690,7 +703,7 @@ namespace net.vieapps.Services.Books
 
 			if (parser == null)
 			{
-				await this.WriteLogAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
+				await this.WriteLogsAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
 				return;
 			}
 
@@ -704,7 +717,7 @@ namespace net.vieapps.Services.Books
 					CorrelationID = correlationID,
 					UpdateLogs = (log, ex, updateCentralizedLogs) =>
 					{
-						this.WriteLog(correlationID, log, ex, updateCentralizedLogs);
+						this.WriteLogs(correlationID, log, ex);
 					}
 				};
 
@@ -721,16 +734,16 @@ namespace net.vieapps.Services.Books
 					this.CancellationTokenSource.Token
 				).ConfigureAwait(false);
 
-				await this.WriteLogAsync(crawler.CorrelationID, this.ServiceName, "Crawlers",
+				await this.WriteLogsAsync(crawler.CorrelationID,
 					$"The crawler is completed [{parser.Title}]" + "\r\n" +
 					"--------------------------------------------------------------" + "\r\n" +
 					string.Join("\r\n", crawler.Logs) + "\r\n"
-					+ "--------------------------------------------------------------"
+					+ "--------------------------------------------------------------", null, this.ServiceName, "Crawlers"
 				);
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(correlationID, $"Error occurred while crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
+				await this.WriteLogsAsync(correlationID, $"Error occurred while crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
 			}
 		}
 
@@ -801,7 +814,7 @@ namespace net.vieapps.Services.Books
 						CorrelationID = correlationID,
 						UpdateLogs = (log, ex, updateCentralizedLogs) =>
 						{
-							this.WriteLog(correlationID, log, ex, updateCentralizedLogs);
+							this.WriteLogs(correlationID, log, ex);
 						}
 					};
 
@@ -819,19 +832,19 @@ namespace net.vieapps.Services.Books
 						fullRecrawl ? false : true
 					).ConfigureAwait(false);
 
-					await this.WriteLogAsync(crawler.CorrelationID, this.ServiceName, "Crawlers",
+					await this.WriteLogsAsync(crawler.CorrelationID,
 						$"The crawler is completed to re-crawl the book [{parser.Title}]" + "\r\n" +
 						"--------------------------------------------------------------" + "\r\n" +
 						string.Join("\r\n", crawler.Logs) + "\r\n"
-						+ "--------------------------------------------------------------"
+						+ "--------------------------------------------------------------", null, this.ServiceName, "Crawlers"
 					);
 				}
 				catch (Exception ex)
 				{
-					await this.WriteLogAsync(correlationID, $"Error occurred while re-crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
+					await this.WriteLogsAsync(correlationID, $"Error occurred while re-crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
 				}
 			else
-				await this.WriteLogAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
+				await this.WriteLogsAsync(correlationID, $"No parser is matched for re-crawling a book [{sourceUrl}]").ConfigureAwait(false);
 
 			// cleanup
 			if (File.Exists(filepath))
@@ -898,7 +911,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while sending an update message of statistics", ex).ConfigureAwait(false);
+				await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while sending an update message of statistics", ex).ConfigureAwait(false);
 			}
 		}
 		#endregion
@@ -960,13 +973,13 @@ namespace net.vieapps.Services.Books
 			Utility.Authors.Clear();
 			var totalRecords = await Book.CountAsync(null, null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
 			var totalPages = new Tuple<long, int>(totalRecords, 50).GetTotalPages();
-			await this.WriteLogAsync(correlationID, $"Total of {totalRecords} books need to process");
+			await this.WriteLogsAsync(correlationID, $"Total of {totalRecords} books need to process");
 
 			var pageNumber = 0;
 			while (pageNumber < totalPages)
 			{
 				pageNumber++;
-				await this.WriteLogAsync(correlationID, $"Process page {pageNumber} / {totalPages}");
+				await this.WriteLogsAsync(correlationID, $"Process page {pageNumber} / {totalPages}");
 
 				(await Book.FindAsync(null, Sorts<Book>.Ascending("LastUpdated"), 50, pageNumber, null, this.CancellationTokenSource.Token).ConfigureAwait(false))
 					.Where(book => !string.IsNullOrWhiteSpace(book.Author))
@@ -1009,7 +1022,7 @@ namespace net.vieapps.Services.Books
 			await this.SendStatisticsAsync().ConfigureAwait(false);
 
 			stopwatch.Stop();
-			await this.WriteLogAsync(UtilityService.NewUUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
+			await this.WriteLogsAsync(UtilityService.NewUUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
 		}
 		#endregion
 
@@ -1178,13 +1191,10 @@ namespace net.vieapps.Services.Books
 		{
 			// run a task to generate files
 			if (book != null)
-				Task.Run(async () =>
-				{
-					await this.GenerateFilesAsync(book).ConfigureAwait(false);
-				}).ConfigureAwait(false);
+				Task.Run(() => this.GenerateFilesAsync(book)).ConfigureAwait(false);
 
 			// return status
-			return new JObject()
+			return new JObject
 			{
 				{ "Status", "OK" }
 			};
@@ -1206,7 +1216,7 @@ namespace net.vieapps.Services.Books
 
 				// prepare
 				var correlationID = UtilityService.NewUUID;
-				var status = new Dictionary<string, bool>()
+				var status = new Dictionary<string, bool>
 				{
 					{ "epub",  File.Exists(filePath + ".epub") },
 					{ "mobi",  File.Exists(filePath + ".mobi") }
@@ -1214,27 +1224,21 @@ namespace net.vieapps.Services.Books
 
 				if (!status["epub"])
 					this.GenerateEpubFile(book, correlationID,
-						(p) =>
+						p => status["epub"] = true,
+						ex =>
 						{
 							status["epub"] = true;
-						},
-						(ex) =>
-						{
-							status["epub"] = true;
-							this.WriteLog(correlationID, "Error occurred while generating EPUB file", ex);
+							this.WriteLogs(correlationID, "Error occurred while generating EPUB file", ex);
 						}
 					);
 
 				if (!status["mobi"])
 					this.GenerateMobiFile(book, correlationID,
-						(p) =>
+						p => status["mobi"] = true,
+						ex =>
 						{
 							status["mobi"] = true;
-						},
-						(ex) =>
-						{
-							status["mobi"] = true;
-							this.WriteLog(correlationID, "Error occurred while generating MOBI file", ex);
+							this.WriteLogs(correlationID, "Error occurred while generating MOBI file", ex);
 						}
 					);
 
@@ -1247,7 +1251,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// send the update message
-			await this.SendUpdateMessageAsync(new UpdateMessage()
+			await this.SendUpdateMessageAsync(new UpdateMessage
 			{
 				Type = "Books#Book#Files",
 				DeviceID = "*",
@@ -1282,48 +1286,44 @@ namespace net.vieapps.Services.Books
 
 		void GenerateEpubFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
 		{
-			try
-			{
-#if DEBUG || GENERATORLOGS
-				this.WriteLog(correlationID, "Start to generate EPUB file [" + book.Name + "]");
-				var stopwatch = new Stopwatch();
-				stopwatch.Start();
-#endif
+			if (this.IsDebugLogEnabled)
+				this.WriteLogs(correlationID, $"Start to generate EPUB file [{book.Name}]");
+			var stopwatch = Stopwatch.StartNew();
 
-				// prepare
-				var navs = book.TOCs.Select((toc, index) => this.GetTOCItem(book, index)).ToList();
-				var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
+			// prepare
+			var navs = book.TOCs.Select((toc, index) => this.GetTOCItem(book, index)).ToList();
+			var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
 
-				// meta data
-				var epub = new Epub.Document();
-				epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
-				epub.AddLanguage(book.Language);
-				epub.AddTitle(book.Title);
-				epub.AddAuthor(book.Author);
-				epub.AddMetaItem("dc:contributor", this.CreditsInApp.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
+			// meta data
+			var epub = new Components.Utility.Epub.Document();
+			epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
+			epub.AddLanguage(book.Language);
+			epub.AddTitle(book.Title);
+			epub.AddAuthor(book.Author);
+			epub.AddMetaItem("dc:contributor", this.CreditsInApp.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
 
-				if (!string.IsNullOrWhiteSpace(book.Translator))
-					epub.AddTranslator(book.Translator);
+			if (!string.IsNullOrWhiteSpace(book.Translator))
+				epub.AddTranslator(book.Translator);
 
-				if (!string.IsNullOrWhiteSpace(book.Original))
-					epub.AddMetaItem("book:Original", book.Original);
+			if (!string.IsNullOrWhiteSpace(book.Original))
+				epub.AddMetaItem("book:Original", book.Original);
 
-				if (!string.IsNullOrWhiteSpace(book.Publisher))
-					epub.AddMetaItem("book:Publisher", book.Publisher);
+			if (!string.IsNullOrWhiteSpace(book.Publisher))
+				epub.AddMetaItem("book:Publisher", book.Publisher);
 
-				if (!string.IsNullOrWhiteSpace(book.Producer))
-					epub.AddMetaItem("book:Producer", book.Producer);
+			if (!string.IsNullOrWhiteSpace(book.Producer))
+				epub.AddMetaItem("book:Producer", book.Producer);
 
-				if (!string.IsNullOrWhiteSpace(book.Source))
-					epub.AddMetaItem("book:Source", book.Source);
+			if (!string.IsNullOrWhiteSpace(book.Source))
+				epub.AddMetaItem("book:Source", book.Source);
 
-				if (!string.IsNullOrWhiteSpace(book.SourceUrl))
-					epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
+			if (!string.IsNullOrWhiteSpace(book.SourceUrl))
+				epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
 
-				// CSS stylesheet
-				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
-					? book.Stylesheet
-					: @"
+			// CSS stylesheet
+			var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
+				? book.Stylesheet
+				: @"
 					h1, h2, h3, h4, h5, h6, p, div, blockquote { 
 						display: block; 
 						clear: both; 
@@ -1368,21 +1368,21 @@ namespace net.vieapps.Services.Books
 						font-size: 0.8em;
 					}";
 
-				epub.AddStylesheetData("style.css", stylesheet.Replace("\t", ""));
+			epub.AddStylesheetData("style.css", stylesheet.Replace("\t", ""));
 
-				// cover image
-				if (!string.IsNullOrWhiteSpace(book.Cover))
+			// cover image
+			if (!string.IsNullOrWhiteSpace(book.Cover))
+			{
+				var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
+				if (coverData != null && coverData.Length > 0)
 				{
-					var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
-					if (coverData != null && coverData.Length > 0)
-					{
-						var coverId = epub.AddImageData("cover.jpg", coverData);
-						epub.AddMetaItem("cover", coverId);
-					}
+					var coverId = epub.AddImageData("cover.jpg", coverData);
+					epub.AddMetaItem("cover", coverId);
 				}
+			}
 
-				// pages & nav points
-				var pageTemplate = @"<!DOCTYPE html>
+			// pages & nav points
+			var pageTemplate = @"<!DOCTYPE html>
 				<html xmlns=""http://www.w3.org/1999/xhtml"">
 					<head>
 						<title>{0}</title>
@@ -1400,93 +1400,77 @@ namespace net.vieapps.Services.Books
 					</body>
 				</html>".Trim().Replace("\t", "");
 
-				// info
-				var info = "<p class=\"author\">" + book.Author + "</p>" + "<h1 class=\"title\">" + book.Title + "</h1>";
+			// info
+			var info = "<p class=\"author\">" + book.Author + "</p>" + "<h1 class=\"title\">" + book.Title + "</h1>";
 
-				if (!string.IsNullOrWhiteSpace(book.Original))
-					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Original: " : "Nguyên tác: ") + "<b><i>" + book.Original + "</i></b></p>";
+			if (!string.IsNullOrWhiteSpace(book.Original))
+				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Original: " : "Nguyên tác: ") + "<b><i>" + book.Original + "</i></b></p>";
 
-				info += "<hr/>";
+			info += "<hr/>";
 
-				if (!string.IsNullOrWhiteSpace(book.Translator))
-					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Translator: " : "Dịch giả: ") + "<b><i>" + book.Translator + "</i></b></p>";
+			if (!string.IsNullOrWhiteSpace(book.Translator))
+				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Translator: " : "Dịch giả: ") + "<b><i>" + book.Translator + "</i></b></p>";
 
-				if (!string.IsNullOrWhiteSpace(book.Publisher))
-					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Pubisher: " : "NXB: ") + "<b><i>" + book.Publisher + "</i></b></p>";
+			if (!string.IsNullOrWhiteSpace(book.Publisher))
+				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Pubisher: " : "NXB: ") + "<b><i>" + book.Publisher + "</i></b></p>";
 
-				if (!string.IsNullOrWhiteSpace(book.Producer))
-					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + "<b><i>" + book.Producer + "</i></b></p>";
+			if (!string.IsNullOrWhiteSpace(book.Producer))
+				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + "<b><i>" + book.Producer + "</i></b></p>";
 
-				info += "<div class=\"credits\">"
-					+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
-					+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
+			info += "<div class=\"credits\">"
+				+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
+				+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
 
-				epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
+			epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
 
-				// chapters
-				for (var index = 0; index < pages.Count; index++)
-				{
-					var name = string.Format("page{0}.xhtml", index + 1);
-					var content = pages[index].NormalizeMediaFilePaths(book);
-
-					var start = content.PositionOf("<img");
-					var end = -1;
-					while (start > -1)
-					{
-						start = content.PositionOf("src=", start + 1) + 5;
-						var @char = content[start - 1];
-						end = content.PositionOf(@char.ToString(), start + 1);
-
-						var image = content.Substring(start, end - start);
-						var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
-						if (imageData != null && imageData.Length > 0)
-							epub.AddImageData(image, imageData);
-
-						start = content.PositionOf("<img", start + 1);
-					}
-
-					epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
-					if (book.Chapters.Count > 1)
-						epub.AddNavPoint(index < navs.Count ? navs[index] : book.Title + " - " + (index + 1).ToString(), name, index + 1);
-				}
-
-				// save into file on disc
-				var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
-				epub.Generate(filePath);
-
-				try
-				{
-					Directory.Delete(epub.GetTempDirectory(), true);
-				}
-				catch { }
-
-#if DEBUG || GENERATORLOGS
-				stopwatch.Stop();
-				this.WriteLog(correlationID, $"Generate EPUB file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}");
-#endif
-
-				// callback when done
-				onCompleted?.Invoke(filePath);
-			}
-			catch (Exception ex)
+			// chapters
+			for (var index = 0; index < pages.Count; index++)
 			{
-				onError?.Invoke(ex);
+				var name = string.Format("page{0}.xhtml", index + 1);
+				var content = pages[index].NormalizeMediaFilePaths(book);
+
+				var start = content.PositionOf("<img");
+				var end = -1;
+				while (start > -1)
+				{
+					start = content.PositionOf("src=", start + 1) + 5;
+					var @char = content[start - 1];
+					end = content.PositionOf(@char.ToString(), start + 1);
+
+					var image = content.Substring(start, end - start);
+					var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
+					if (imageData != null && imageData.Length > 0)
+						epub.AddImageData(image, imageData);
+
+					start = content.PositionOf("<img", start + 1);
+				}
+
+				epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
+				if (book.Chapters.Count > 1)
+					epub.AddNavPoint(index < navs.Count ? navs[index] : book.Title + " - " + (index + 1).ToString(), name, index + 1);
 			}
+
+			// save into file on disc
+			var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
+			epub.Generate(filePath, onCompleted, onError);
+
+			stopwatch.Stop();
+			if (this.IsDebugLogEnabled)
+				this.WriteLogs(correlationID, $"Generate EPUB file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}");
 		}
 
 		void GenerateMobiFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
 		{
+			// file name & path
+			var filename = book.ID;
+			var filePath = book.GetFolderPath() + Path.DirectorySeparatorChar.ToString();
+
+			// generate
 			try
 			{
-#if DEBUG || GENERATORLOGS
-				this.WriteLog(correlationID, "Start to generate MOBI file [" + book.Name + "]");
-				var stopwatch = new Stopwatch();
-				stopwatch.Start();
-#endif
-
-				// file name & path
-				var filename = book.ID;
-				var filePath = book.GetFolderPath() + Path.DirectorySeparatorChar.ToString();
+				if (this.IsDebugLogEnabled)
+					this.WriteLogs(correlationID, $"Start to generate MOBI file [{book.Name}]");
+				var stopwatch = Stopwatch.StartNew();
 
 				// prepare HTML
 				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
@@ -1653,7 +1637,7 @@ namespace net.vieapps.Services.Books
 				UtilityService.WriteTextFile(filePath + filename + ".opf", content, false);
 
 				// generate MOBI
-				var generator = UtilityService.GetAppSetting("Books:MobiFileGenerator", "VIEApps.Services.Books.Mobi.Generator.dll");
+				var generator = UtilityService.GetAppSetting("Books:MobiFileGenerator", "VIEApps.Components.Utility.MOBIGenerator.dll");
 				var output = "";
 
 				UtilityService.RunProcess(generator, "\"" + filePath + filename + ".opf\"",
@@ -1673,12 +1657,11 @@ namespace net.vieapps.Services.Books
 								catch { }
 							});
 
-#if DEBUG || GENERATORLOGS
 						stopwatch.Stop();
-						this.WriteLog(correlationID, $"Generate MOBI file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}\r\n{output}");
-#endif
+						if (this.IsDebugLogEnabled)
+							this.WriteLogs(correlationID, $"Generate MOBI file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}\r\n{output}");
 
-						// call back when done
+						// callback
 						onCompleted?.Invoke(filePath + UtilityService.GetNormalizedFilename(book.Name) + ".mobi");
 					},
 					(sender, args) =>
@@ -1690,6 +1673,18 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
+				// delete temporary files
+				UtilityService.GetFiles(filePath, filename + ".*")
+					.ForEach(file =>
+					{
+						try
+						{
+							file.Delete();
+						}
+						catch { }
+					});
+
+				// callback
 				onError?.Invoke(ex);
 			}
 		}
@@ -1705,7 +1700,7 @@ namespace net.vieapps.Services.Books
 			{
 				// get bookmarks
 				case "GET":
-					return new JObject()
+					return new JObject
 					{
 						{"ID", account.ID },
 						{"Sync", true },
@@ -1727,7 +1722,7 @@ namespace net.vieapps.Services.Books
 					account.LastSync = DateTime.Now;
 					await Account.UpdateAsync(account, true, cancellationToken).ConfigureAwait(false);
 
-					return new JObject()
+					return new JObject
 					{
 						{"ID", account.ID },
 						{ "Objects", account.Bookmarks.ToJArray() }
@@ -1745,7 +1740,7 @@ namespace net.vieapps.Services.Books
 					account.LastSync = DateTime.Now;
 					await Account.UpdateAsync(account, true, cancellationToken).ConfigureAwait(false);
 
-					var data = new JObject()
+					var data = new JObject
 					{
 						{"ID", account.ID },
 						{"Sync", true },
@@ -1768,7 +1763,7 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Process inter-communicate messages
-		protected override async Task ProcessInterCommunicateMessageAsync(CommunicateMessage message)
+		protected override async Task ProcessInterCommunicateMessageAsync(CommunicateMessage message, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
 			var data = message.Data?.ToExpandoObject();
@@ -1779,24 +1774,24 @@ namespace net.vieapps.Services.Books
 			if (message.Type.IsEquals("Download") && !string.IsNullOrWhiteSpace(data.Get<string>("UserID")) && !string.IsNullOrWhiteSpace(data.Get<string>("BookID")))
 				try
 				{
-					var book = await Book.GetAsync<Book>(data.Get<string>("BookID")).ConfigureAwait(false);
+					var book = await Book.GetAsync<Book>(data.Get<string>("BookID"), cancellationToken).ConfigureAwait(false);
 					if (book != null)
 					{
-						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString()).ConfigureAwait(false);
+						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString(), cancellationToken).ConfigureAwait(false);
 						await this.SendUpdateMessageAsync(new UpdateMessage()
 						{
 							DeviceID = "*",
 							Type = "Books#Book#Counters",
 							Data = result
-						}).ConfigureAwait(false);
+						}, cancellationToken).ConfigureAwait(false);
 					}
 #if DEBUG
-					this.WriteLog(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
+					this.WriteLogs(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
 #endif
 				}
 				catch (Exception ex)
 				{
-					await this.WriteLogAsync(UtilityService.NewUUID, "Error occurred while updating counters", ex).ConfigureAwait(false);
+					await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while updating counters", ex).ConfigureAwait(false);
 				}
 		}
 		#endregion
@@ -1867,7 +1862,7 @@ namespace net.vieapps.Services.Books
 			{
 				UpdateLogs = (log, ex, updateCentralizedLogs) =>
 				{
-					this.WriteLog(this.Crawler.CorrelationID, log, ex, updateCentralizedLogs);
+					this.WriteLogs(this.Crawler.CorrelationID, log, ex);
 				}
 			};
 
@@ -1881,7 +1876,7 @@ namespace net.vieapps.Services.Books
 					return;
 
 				this.Crawler.CorrelationID = UtilityService.NewUUID;
-				this.WriteLog(this.Crawler.CorrelationID, "Start the crawler");
+				this.WriteLogs(this.Crawler.CorrelationID, "Start the crawler");
 				this.IsCrawlerRunning = true;
 				this.Crawler.Start(
 					async (book, token) =>
@@ -1891,23 +1886,23 @@ namespace net.vieapps.Services.Books
 					},
 					(times) =>
 					{
-						this.WriteLog(this.Crawler.CorrelationID, this.ServiceName, "Crawlers",
+						this.WriteLogs(this.Crawler.CorrelationID,
 							$"The crawler is completed - Execution times: {times.GetElapsedTimes()}" + "\r\n" +
 							"--------------------------------------------------------------" + "\r\n" +
 							string.Join("\r\n", this.Crawler.Logs) + "\r\n"
-							+ "--------------------------------------------------------------"
+							+ "--------------------------------------------------------------", null, this.ServiceName, "Crawlers"
 						);
 						this.IsCrawlerRunning = false;
 						this.Crawler.Logs.Clear();
 					},
 					(ex) =>
 					{
-						this.WriteLog(this.Crawler.CorrelationID, this.ServiceName, "Crawlers",
+						this.WriteLogs(this.Crawler.CorrelationID,
 							(ex is OperationCanceledException ? "......... Cancelled" : "Error occurred while crawling") + "\r\n" +
 							"--------------------------------------------------------------" + "\r\n" +
 							string.Join("\r\n", this.Crawler.Logs) + "\r\n"
 							+ "--------------------------------------------------------------"
-						, ex);
+						, ex, this.ServiceName, "Crawlers");
 						this.IsCrawlerRunning = false;
 						this.Crawler.Logs.Clear();
 					},
@@ -1936,12 +1931,12 @@ namespace net.vieapps.Services.Books
 					var correlationID = UtilityService.NewUUID;
 					try
 					{
-						await this.WriteLogAsync(correlationID, "Start to re-compute statistics").ConfigureAwait(false);
+						await this.WriteLogsAsync(correlationID, "Start to re-compute statistics").ConfigureAwait(false);
 						await this.RecomputeStatistics(correlationID).ConfigureAwait(false);
 					}
 					catch (Exception ex)
 					{
-						await this.WriteLogAsync(correlationID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
+						await this.WriteLogsAsync(correlationID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
 					}
 				}).ConfigureAwait(false);
 		}
@@ -1970,7 +1965,7 @@ namespace net.vieapps.Services.Books
 				var sort = Sorts<Book>.Descending("LastUpdated");
 
 				await Task.WhenAll(
-					Utility.Cache.RemoveAsync($"{book.GetCacheKey()}-json"),
+					Utility.Cache.RemoveAsync($"{book.GetCacheKey()}:json"),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, filter, sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
 					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
@@ -1984,7 +1979,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				await this.WriteLogAsync(UtilityService.NewUUID, $"Error occurred while clearing related cached of a book [{book.Title}]", ex).ConfigureAwait(false);
+				await this.WriteLogsAsync(UtilityService.NewUUID, $"Error occurred while clearing related cached of a book [{book.Title}]", ex).ConfigureAwait(false);
 			}
 		}
 
