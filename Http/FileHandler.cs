@@ -49,11 +49,11 @@ namespace net.vieapps.Services.Books
 		{
 			// check "If-Modified-Since" request to reduce traffict
 			var eTag = "BookFile#" + $"{this.RequestUri}".ToLower().GenerateUUID();
-			if (eTag.IsEquals(context.Request.Headers["If-None-Match"].First()) && !context.Request.Headers["If-Modified-Since"].First().Equals(""))
+			if (eTag.IsEquals(context.GetHeaderParameter("If-None-Match")) && context.GetHeaderParameter("If-Modified-Since") != null)
 			{
 				context.SetResponseHeaders((int)HttpStatusCode.NotModified, eTag, 0, "public", context.GetCorrelationID());
 				if (Global.IsDebugLogEnabled)
-					context.WriteLogs(this.Logger, "BookFiles", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
+					context.WriteLogs(this.Logger, "Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
 				return;
 			}
 
@@ -90,40 +90,36 @@ namespace net.vieapps.Services.Books
 				{ "Expires", DateTime.Now.AddDays(7).ToHttpString() }
 			});
 
-			string contentType = fileInfo.Name.IsEndsWith(".png")
+			var contentType = fileInfo.Name.IsEndsWith(".png")
 				? "png"
 				: fileInfo.Name.IsEndsWith(".jpg") || fileInfo.Name.IsEndsWith(".jpeg")
 					? "jpeg"
 					: fileInfo.Name.IsEndsWith(".gif")
 						? "gif"
 						: "bmp";
-			await context.WriteAsync(fileInfo, "image/" + contentType, null, eTag, cancellationToken).ConfigureAwait(false);
 
-			if (Global.IsDebugLogEnabled)
-				context.WriteLogs(this.Logger, "BookFiles", $"Show file successful ({this.RequestUri})");
+			await Task.WhenAll(
+				context.WriteAsync(fileInfo, $"image/{contentType}", null, eTag, cancellationToken),
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Show file successful ({this.RequestUri})")
+			).ConfigureAwait(false);
 		}
 
 		async Task DownloadBookFileAsync(HttpContext context, CancellationToken cancellationToken)
 		{
-			// prepare
-			var requestUrl = $"{this.RequestUri}";
-			while (requestUrl.StartsWith("/"))
-				requestUrl = requestUrl.Right(requestUrl.Length - 1);
-			if (requestUrl.IndexOf("?") > 0)
-				requestUrl = requestUrl.Left(requestUrl.IndexOf("?"));
+			var requestUrl = context.GetRequestUrl(true, true);
 
 			// check "If-Modified-Since" request to reduce traffict
-			var eTag = "BookFile#" + requestUrl.ToLower().GenerateUUID();
-			if (eTag.IsEquals(context.Request.Headers["If-None-Match"].First()) && !context.Request.Headers["If-Modified-Since"].First().Equals(""))
+			var eTag = $"BookFile#{requestUrl.GenerateUUID()}";
+			if (eTag.IsEquals(context.GetHeaderParameter("If-None-Match")) && context.GetHeaderParameter("If-Modified-Since") != null)
 			{
 				context.SetResponseHeaders((int)HttpStatusCode.NotModified, eTag, 0, "public", context.GetCorrelationID());
 				if (Global.IsDebugLogEnabled)
-					context.WriteLogs(this.Logger, "BookFiles", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
+					context.WriteLogs(this.Logger, "Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
 				return;
 			}
 
 			// check permissions
-			if (context.User == null || context.User.Identity == null || !context.User.Identity.IsAuthenticated)
+			if (!context.User.Identity.IsAuthenticated)
 				throw new AccessDeniedException();
 
 			// parse
@@ -131,7 +127,7 @@ namespace net.vieapps.Services.Books
 			if (requestInfo.Length < 4)
 				throw new InvalidRequestException();
 
-			string ext = requestUrl.IsEndsWith(".epub")
+			var ext = requestUrl.IsEndsWith(".epub")
 				? ".epub"
 				: requestUrl.IsEndsWith(".mobi")
 					? ".mobi"
@@ -151,18 +147,6 @@ namespace net.vieapps.Services.Books
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
-			// send inter-communicate message to track logs
-			await this.SendInterCommunicateMessageAsync(new CommunicateMessage()
-			{
-				ServiceName = "Books",
-				Type = "Download",
-				Data = new JObject
-				{
-					{ "UserID", context.User.Identity.Name },
-					{ "BookID", requestInfo[3].Url64Decode() },
-				}
-			}, cancellationToken).ConfigureAwait(false);
-
 			// response
 			context.SetResponseHeaders((int)HttpStatusCode.OK, new Dictionary<string, string>
 			{
@@ -170,45 +154,62 @@ namespace net.vieapps.Services.Books
 				{ "Expires", DateTime.Now.AddDays(7).ToHttpString() }
 			});
 
-			string contentType = fileInfo.Name.IsEndsWith(".epub")
+			var contentType = fileInfo.Name.IsEndsWith(".epub")
 				? "epub+zip"
 				: fileInfo.Name.IsEndsWith(".mobi")
 					? "x-mobipocket-ebook"
 					: fileInfo.Name.IsEndsWith(".json")
-						?"json"
+						? "json"
 						: "octet-stream";
-			await context.WriteAsync(fileInfo, "application/" + contentType, UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken).ConfigureAwait(false);
+
+			await Task.WhenAll(
+				context.WriteAsync(fileInfo, "application/" + contentType, UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken),
+				new CommunicateMessage
+				{
+					ServiceName = "Books",
+					Type = "Download",
+					Data = new JObject
+					{
+						{ "UserID", context.User.Identity.Name },
+						{ "BookID", requestInfo[3].Url64Decode() },
+					}
+				}.PublishAsync(this.Logger),
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Successfully download e-book file - User ID: {context.User.Identity.Name} - Book: {name}")
+			).ConfigureAwait(false);
 		}
 
 		async Task ReceiveBookCoverAsync(HttpContext context, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (context.User == null || context.User.Identity == null || !context.User.Identity.IsAuthenticated)
+			if (!context.User.Identity.IsAuthenticated)
 				throw new AccessDeniedException();
 
-			var id = context.Request.Headers["x-book-id"];
-			if (!await (context.User.Identity as UserIdentity).CanEditAsync("books", "book", id).ConfigureAwait(false))
+			var id = context.GetHeaderParameter("x-book-id") ?? "";
+			if (string.IsNullOrWhiteSpace(id))
+				throw new InvalidRequestException("Invalid book identity");
+
+			if (!await context.CanEditAsync("Books", "Book", id).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
-			var info = await context.CallServiceAsync("books", "book", "GET", new Dictionary<string, string>()
+			var info = await context.CallServiceAsync("Books", "Book", "GET", new Dictionary<string, string>()
 			{
 				{ "object-identity", "brief-info" },
 				{ "id", id }
-			}).ConfigureAwait(false);
+			}, null, this.Logger, cancellationToken).ConfigureAwait(false);
 
-			var path = Path.Combine(Utility.FolderOfDataFiles, (info["Title"] as JValue).Value.ToString().GetFirstChar(), Definitions.MediaFolder, (info["PermanentID"] as JValue).Value as string + "-");
-			var name = ((info["Title"] as JValue).Value as string + " - " + (info["Author"] as JValue).Value as string + " - " + DateTime.Now.ToIsoString()).GetMD5();
-			var extension = "jpg";
+			var fileSize = 0;
+			var filePath = Path.Combine(Utility.FolderOfDataFiles, info.Get<string>("Title").GetFirstChar(), Definitions.MediaFolder, info.Get<string>("PermanentID") + "-");
+			var fileName = (info.Get<string>("Title") + " - " + info.Get<string>("Author") + " - " + DateTime.Now.ToIsoString()).GenerateUUID() + ".";
 
-			// base64 image
-			if (!context.Request.Headers["x-as-base64"].First().Equals(""))
+			// base64
+			if (context.GetHeaderParameter("x-as-base64") != null)
 			{
-				// parse
+				// prepare
 				var body = (await context.ReadTextAsync(cancellationToken).ConfigureAwait(false)).ToExpandoObject();
 				var data = body.Get<string>("Data").ToArray();
-				var content = data.Last().Base64ToBytes();
-				extension = data.First().ToArray(";").First().ToArray(":").Last();
+
+				var extension = data.First().ToArray(";").First().ToArray(":").Last();
 				extension = extension.IsEndsWith("png")
 					? "png"
 					: extension.IsEndsWith("bmp")
@@ -217,30 +218,59 @@ namespace net.vieapps.Services.Books
 							? "gif"
 							: "jpg";
 
+				fileName += extension;
+				filePath += fileName;
+
+				var content = data.Last().Base64ToBytes();
+				fileSize = content.Length;
+
+				if (File.Exists(filePath))
+					try
+					{
+						File.Delete(filePath);
+					}
+					catch { }
+
 				// write to file
-				await UtilityService.WriteBinaryFileAsync(path + name + "." + extension, content, cancellationToken).ConfigureAwait(false);
-				if (Global.IsDebugLogEnabled)
-					context.WriteLogs(this.Logger, "BookFiles", $"New cover (base64) has been uploaded ({path + name + "." + extension} - {content.Length:#,##0} bytes)");
+				await UtilityService.WriteBinaryFileAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 			}
 
 			// file
 			else
 			{
+				// prepare
+				if (context.Request.Form.Files.Count < 1)
+					throw new InvalidRequestException("No uploaded file is found");
+
 				var file = context.Request.Form.Files[0];
-				extension = Path.GetExtension(file.FileName);
-				using (var stream = new FileStream(path + name + "." + extension, FileMode.Create, FileAccess.Write, FileShare.None, TextFileReader.BufferSize, true))
+				if (file == null || file.Length < 1)
+					throw new InvalidRequestException("No uploaded file is found");
+
+				fileSize = (int)file.Length;
+				fileName += Path.GetExtension(file.FileName);
+				filePath += fileName;
+
+				if (File.Exists(filePath))
+					try
+					{
+						File.Delete(filePath);
+					}
+					catch { }
+
+				using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, TextFileReader.BufferSize, true))
 				{
-					await context.Request.Form.Files[0].CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
-					if (Global.IsDebugLogEnabled)
-						context.WriteLogs(this.Logger, "BookFiles", $"New cover (file) has been uploaded ({path + name + "." + extension} - {stream.Position:#,##0} bytes)");
+					await file.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
 				}
 			}
 
 			// response
-			await context.WriteAsync(new JObject
-			{
-				{ "Uri", Definitions.MediaURI + name + "." + extension }
-			}, cancellationToken).ConfigureAwait(false);
+			await Task.WhenAll(
+				context.WriteAsync(new JObject
+				{
+					{ "Uri", Definitions.MediaURI + fileName }
+				}, cancellationToken),
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"New cover image ({(context.GetHeaderParameter("x-as-base64") != null ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:#,##0} bytes)")
+			).ConfigureAwait(false);
 		}
 	}
 }

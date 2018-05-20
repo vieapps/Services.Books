@@ -21,8 +21,6 @@ namespace net.vieapps.Services.Books
 {
 	public class ServiceComponent : ServiceBase
 	{
-
-		#region Constructor & Destructor
 		public ServiceComponent() : base() { }
 
 		public override void Dispose()
@@ -38,7 +36,6 @@ namespace net.vieapps.Services.Books
 		}
 
 		public override string ServiceName => "Books";
-		#endregion
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
@@ -262,7 +259,7 @@ namespace net.vieapps.Services.Books
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAsync($"{cacheKey }{pageNumber}:json", json, Utility.CacheExpirationTime / 2).ConfigureAwait(false);
+				await Utility.Cache.SetAsync($"{cacheKey }{pageNumber}:json", json, Utility.Cache.ExpirationTime / 2).ConfigureAwait(false);
 			}
 
 			// return the result

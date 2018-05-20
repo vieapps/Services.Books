@@ -22,34 +22,21 @@ namespace net.vieapps.Services.Books
 	{
 
 		#region Caching mechanism
-		static int _CacheExpirationTime = -1;
-
-		internal static int CacheExpirationTime
+		static Utility()
 		{
-			get
+			Task.Run(async () =>
 			{
-				if (Utility._CacheExpirationTime < 0)
-					try
-					{
-						Utility._CacheExpirationTime = UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>();
-					}
-					catch
-					{
-						Utility._CacheExpirationTime = 30;
-					}
-				return Utility._CacheExpirationTime;
-			}
+				await Task.Delay(123).ConfigureAwait(false);
+				Utility.GetCache();
+			}).ConfigureAwait(false);
 		}
 
-		static Cache _Cache = null;
-
-		public static Cache Cache
+		internal static Cache GetCache()
 		{
-			get
-			{
-				return Utility._Cache ?? (Utility._Cache = new Cache(UtilityService.GetAppSetting("Books:CacheName","VIEApps-Services-Books"), Utility.CacheExpirationTime, UtilityService.GetAppSetting("Cache:Provider")));
-			}
+			return Utility.Cache ?? (Utility.Cache = new Cache("VIEApps-Services-Books", UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>(), false, UtilityService.GetAppSetting("Cache:Provider"), Logger.GetLoggerFactory()));
 		}
+
+		internal static Cache Cache { get; private set; }
 		#endregion
 
 		#region Configuration settings
