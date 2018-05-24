@@ -21,6 +21,8 @@ namespace net.vieapps.Services.Books
 {
 	public class ServiceComponent : ServiceBase
 	{
+		public override string ServiceName => "Books";
+
 		public ServiceComponent() : base() { }
 
 		public override void Dispose()
@@ -34,8 +36,6 @@ namespace net.vieapps.Services.Books
 		{
 			this.Dispose();
 		}
-
-		public override string ServiceName => "Books";
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
@@ -322,7 +322,7 @@ namespace net.vieapps.Services.Books
 			Book bookJson = null;
 			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || "brief-info".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
-				bookJson = await book.GetBookAsync().ConfigureAwait(false);
+				bookJson = await book.GetBookAsync(cancellationToken).ConfigureAwait(false);
 				if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
 				{
 					book.SourceUrl = bookJson.SourceUrl;
@@ -343,7 +343,7 @@ namespace net.vieapps.Services.Books
 				var result = await this.UpdateCounterAsync(book, requestInfo.Query["action"] ?? "View", cancellationToken).ConfigureAwait(false);
 
 				// send update message
-				await this.SendUpdateMessageAsync(new UpdateMessage()
+				await this.SendUpdateMessageAsync(new UpdateMessage
 				{
 					DeviceID = "*",
 					ExcludedDeviceID = requestInfo.Session.DeviceID,
@@ -365,7 +365,7 @@ namespace net.vieapps.Services.Books
 						? book.TotalChapters
 						: chapter;
 
-				return new JObject()
+				return new JObject
 				{
 					{ "ID", book.ID },
 					{ "Chapter", chapter },
@@ -375,7 +375,7 @@ namespace net.vieapps.Services.Books
 
 			// brief information
 			else if ("brief-info".IsEquals(objectIdentity))
-				return new JObject()
+				return new JObject
 				{
 					{ "ID", bookJson.ID },
 					{ "PermanentID", bookJson.GetPermanentID() },
@@ -394,7 +394,7 @@ namespace net.vieapps.Services.Books
 			{
 				var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 				var fullRecrawl = requestInfo.Query.ContainsKey("full") && "true".IsEquals(requestInfo.Query["full"]);
-				var recrawl = Task.Run(async () => await this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl).ConfigureAwait(false)).ConfigureAwait(false);
+				var recrawl = Task.Run(() => this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl)).ConfigureAwait(false);
 				return new JObject();
 			}
 
@@ -402,11 +402,11 @@ namespace net.vieapps.Services.Books
 			else
 				return book.ToJson(
 					false,
-					(json) =>
+					json =>
 					{
 						json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
 						if (book.TotalChapters < 2)
-							json.Add(new JProperty("Body", bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : ""));
+							json["Body"] = bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : "";
 					}
 				);
 		}
@@ -442,7 +442,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// return data
-			return new JObject()
+			return new JObject
 			{
 				{ "ID", book.ID },
 				{ "Counters", book.Counters.ToJArray(c => c.ToJson()) }
@@ -1200,51 +1200,62 @@ namespace net.vieapps.Services.Books
 		async Task GenerateFilesAsync(Book book)
 		{
 			// prepare
+			var correlationID = UtilityService.NewUUID;
 			var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name));
 			var flag = "Files-" + filePath.ToLower().GetMD5();
 			if (await Utility.Cache.ExistsAsync(flag).ConfigureAwait(false))
+			{
+				if (this.IsDebugLogEnabled)
+					await this.WriteLogsAsync(correlationID, $"Other instance is currently generating e-book files, please wait for completed... [{flag}]", null, this.ServiceName, "Generators").ConfigureAwait(false);
 				return;
+			}
 
 			// generate files
 			if (!File.Exists(filePath + ".epub") || !File.Exists(filePath + ".mobi"))
 			{
 				// update flag
-				await Utility.Cache.SetAsync(flag, book.ID).ConfigureAwait(false);
+				await Task.WhenAll(
+					Utility.Cache.SetAsync(flag, book.ID, 7),
+					this.IsDebugLogEnabled ? this.WriteLogsAsync(correlationID, $"Start to generate e-book files [{book.Name} => {flag}]", null, this.ServiceName, "Generators") : Task.CompletedTask
+				).ConfigureAwait(false);
 
 				// prepare
-				var correlationID = UtilityService.NewUUID;
 				var status = new Dictionary<string, bool>
 				{
 					{ "epub",  File.Exists(filePath + ".epub") },
 					{ "mobi",  File.Exists(filePath + ".mobi") }
 				};
+				var generatingTasks = new List<Task>();
 
 				if (!status["epub"])
-					this.GenerateEpubFile(book, correlationID,
+					generatingTasks.Add(Task.Run(() => this.GenerateEpubFile(book, correlationID,
 						p => status["epub"] = true,
 						ex =>
 						{
 							status["epub"] = true;
-							this.WriteLogs(correlationID, "Error occurred while generating EPUB file", ex);
+							this.WriteLogs(correlationID, "Error occurred while generating EPUB file", ex, this.ServiceName, "Generators");
 						}
-					);
+					)));
 
 				if (!status["mobi"])
-					this.GenerateMobiFile(book, correlationID,
+					generatingTasks.Add(Task.Run(() => this.GenerateMobiFile(book, correlationID,
 						p => status["mobi"] = true,
 						ex =>
 						{
 							status["mobi"] = true;
-							this.WriteLogs(correlationID, "Error occurred while generating MOBI file", ex);
+							this.WriteLogs(correlationID, "Error occurred while generating MOBI file", ex, this.ServiceName, "Generators");
 						}
-					);
+					)));
 
 				// wait for all tasks are completed
 				while (!status["epub"] || !status["mobi"])
-					await Task.Delay(789).ConfigureAwait(false);
+					await Task.Delay(UtilityService.GetRandomNumber(234, 567)).ConfigureAwait(false);
 
-				// update flag
-				await Utility.Cache.RemoveAsync(flag).ConfigureAwait(false);
+				// update innformation
+				await Task.WhenAll(
+					Utility.Cache.RemoveAsync(flag),
+					this.IsDebugLogEnabled ? this.WriteLogsAsync(correlationID, $"E-book files are generated [{book.Name} => {flag}]", null, this.ServiceName, "Generators") : Task.CompletedTask
+				).ConfigureAwait(false);
 			}
 
 			// send the update message
@@ -1252,7 +1263,7 @@ namespace net.vieapps.Services.Books
 			{
 				Type = "Books#Book#Files",
 				DeviceID = "*",
-				Data = new JObject()
+				Data = new JObject
 				{
 					{ "ID", book.ID },
 					{ "Files", book.GetFiles() }
@@ -1260,15 +1271,9 @@ namespace net.vieapps.Services.Books
 			}).ConfigureAwait(false);
 		}
 
-		public string CreditsInApp
-		{
-			get { return "<p>Chuyển đổi và đóng gói bằng <b>VIEApps Online Books</b></p>"; }
-		}
+		public string CreditsInApp => "<p>Chuyển đổi và đóng gói bằng <b>VIEApps Online Books</b></p>";
 
-		public string PageBreak
-		{
-			get { return "<mbp:pagebreak/>"; }
-		}
+		public string PageBreak => "<mbp:pagebreak/>";
 
 		public string GetTOCItem(Book book, int index)
 		{
@@ -1283,44 +1288,46 @@ namespace net.vieapps.Services.Books
 
 		void GenerateEpubFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
 		{
-			if (this.IsDebugLogEnabled)
-				this.WriteLogs(correlationID, $"Start to generate EPUB file [{book.Name}]");
-			var stopwatch = Stopwatch.StartNew();
+			try
+			{
+				var stopwatch = Stopwatch.StartNew();
+				if (this.IsDebugLogEnabled)
+					this.WriteLogs(correlationID, $"Start to generate EPUB file [{book.Name}]", null, this.ServiceName, "Generators");
 
-			// prepare
-			var navs = book.TOCs.Select((toc, index) => this.GetTOCItem(book, index)).ToList();
-			var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
+				// prepare
+				var navs = book.TOCs.Select((toc, index) => this.GetTOCItem(book, index)).ToList();
+				var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
 
-			// meta data
-			var epub = new Components.Utility.Epub.Document();
-			epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
-			epub.AddLanguage(book.Language);
-			epub.AddTitle(book.Title);
-			epub.AddAuthor(book.Author);
-			epub.AddMetaItem("dc:contributor", this.CreditsInApp.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
+				// meta data
+				var epub = new Components.Utility.Epub.Document();
+				epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
+				epub.AddLanguage(book.Language);
+				epub.AddTitle(book.Title);
+				epub.AddAuthor(book.Author);
+				epub.AddMetaItem("dc:contributor", this.CreditsInApp.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
 
-			if (!string.IsNullOrWhiteSpace(book.Translator))
-				epub.AddTranslator(book.Translator);
+				if (!string.IsNullOrWhiteSpace(book.Translator))
+					epub.AddTranslator(book.Translator);
 
-			if (!string.IsNullOrWhiteSpace(book.Original))
-				epub.AddMetaItem("book:Original", book.Original);
+				if (!string.IsNullOrWhiteSpace(book.Original))
+					epub.AddMetaItem("book:Original", book.Original);
 
-			if (!string.IsNullOrWhiteSpace(book.Publisher))
-				epub.AddMetaItem("book:Publisher", book.Publisher);
+				if (!string.IsNullOrWhiteSpace(book.Publisher))
+					epub.AddMetaItem("book:Publisher", book.Publisher);
 
-			if (!string.IsNullOrWhiteSpace(book.Producer))
-				epub.AddMetaItem("book:Producer", book.Producer);
+				if (!string.IsNullOrWhiteSpace(book.Producer))
+					epub.AddMetaItem("book:Producer", book.Producer);
 
-			if (!string.IsNullOrWhiteSpace(book.Source))
-				epub.AddMetaItem("book:Source", book.Source);
+				if (!string.IsNullOrWhiteSpace(book.Source))
+					epub.AddMetaItem("book:Source", book.Source);
 
-			if (!string.IsNullOrWhiteSpace(book.SourceUrl))
-				epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
+				if (!string.IsNullOrWhiteSpace(book.SourceUrl))
+					epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
 
-			// CSS stylesheet
-			var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
-				? book.Stylesheet
-				: @"
+				// CSS stylesheet
+				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
+					? book.Stylesheet
+					: @"
 					h1, h2, h3, h4, h5, h6, p, div, blockquote { 
 						display: block; 
 						clear: both; 
@@ -1365,21 +1372,22 @@ namespace net.vieapps.Services.Books
 						font-size: 0.8em;
 					}";
 
-			epub.AddStylesheetData("style.css", stylesheet.Replace("\t", ""));
+				epub.AddStylesheetData("style.css", stylesheet.Replace("\t", ""));
 
-			// cover image
-			if (!string.IsNullOrWhiteSpace(book.Cover))
-			{
-				var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
-				if (coverData != null && coverData.Length > 0)
+				// cover image
+				if (!string.IsNullOrWhiteSpace(book.Cover))
 				{
-					var coverId = epub.AddImageData("cover.jpg", coverData);
-					epub.AddMetaItem("cover", coverId);
+					var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
+					if (coverData != null && coverData.Length > 0)
+					{
+						var coverId = epub.AddImageData("cover.jpg", coverData);
+						epub.AddMetaItem("cover", coverId);
+					}
 				}
-			}
 
-			// pages & nav points
-			var pageTemplate = @"<!DOCTYPE html>
+				// pages & nav points
+				var pageTemplate =
+					@"<!DOCTYPE html>
 				<html xmlns=""http://www.w3.org/1999/xhtml"">
 					<head>
 						<title>{0}</title>
@@ -1397,63 +1405,71 @@ namespace net.vieapps.Services.Books
 					</body>
 				</html>".Trim().Replace("\t", "");
 
-			// info
-			var info = "<p class=\"author\">" + book.Author + "</p>" + "<h1 class=\"title\">" + book.Title + "</h1>";
+				// info
+				var info = "<p class=\"author\">" + book.Author + "</p>" + "<h1 class=\"title\">" + book.Title + "</h1>";
 
-			if (!string.IsNullOrWhiteSpace(book.Original))
-				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Original: " : "Nguyên tác: ") + "<b><i>" + book.Original + "</i></b></p>";
+				if (!string.IsNullOrWhiteSpace(book.Original))
+					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Original: " : "Nguyên tác: ") + "<b><i>" + book.Original + "</i></b></p>";
 
-			info += "<hr/>";
+				info += "<hr/>";
 
-			if (!string.IsNullOrWhiteSpace(book.Translator))
-				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Translator: " : "Dịch giả: ") + "<b><i>" + book.Translator + "</i></b></p>";
+				if (!string.IsNullOrWhiteSpace(book.Translator))
+					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Translator: " : "Dịch giả: ") + "<b><i>" + book.Translator + "</i></b></p>";
 
-			if (!string.IsNullOrWhiteSpace(book.Publisher))
-				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Pubisher: " : "NXB: ") + "<b><i>" + book.Publisher + "</i></b></p>";
+				if (!string.IsNullOrWhiteSpace(book.Publisher))
+					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Pubisher: " : "NXB: ") + "<b><i>" + book.Publisher + "</i></b></p>";
 
-			if (!string.IsNullOrWhiteSpace(book.Producer))
-				info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + "<b><i>" + book.Producer + "</i></b></p>";
+				if (!string.IsNullOrWhiteSpace(book.Producer))
+					info += "<p class=\"info\">" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + "<b><i>" + book.Producer + "</i></b></p>";
 
-			info += "<div class=\"credits\">"
-				+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
-				+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
+				info += "<div class=\"credits\">"
+					+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
+					+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
 
-			epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
+				epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
 
-			// chapters
-			for (var index = 0; index < pages.Count; index++)
-			{
-				var name = string.Format("page{0}.xhtml", index + 1);
-				var content = pages[index].NormalizeMediaFilePaths(book);
-
-				var start = content.PositionOf("<img");
-				var end = -1;
-				while (start > -1)
+				// chapters
+				for (var index = 0; index < pages.Count; index++)
 				{
-					start = content.PositionOf("src=", start + 1) + 5;
-					var @char = content[start - 1];
-					end = content.PositionOf(@char.ToString(), start + 1);
+					var name = string.Format("page{0}.xhtml", index + 1);
+					var content = pages[index].NormalizeMediaFilePaths(book);
 
-					var image = content.Substring(start, end - start);
-					var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
-					if (imageData != null && imageData.Length > 0)
-						epub.AddImageData(image, imageData);
+					var start = content.PositionOf("<img");
+					var end = -1;
+					while (start > -1)
+					{
+						start = content.PositionOf("src=", start + 1) + 5;
+						var @char = content[start - 1];
+						end = content.PositionOf(@char.ToString(), start + 1);
 
-					start = content.PositionOf("<img", start + 1);
+						var image = content.Substring(start, end - start);
+						var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
+						if (imageData != null && imageData.Length > 0)
+							epub.AddImageData(image, imageData);
+
+						start = content.PositionOf("<img", start + 1);
+					}
+
+					epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
+					if (book.Chapters.Count > 1)
+						epub.AddNavPoint(index < navs.Count ? navs[index] : book.Title + " - " + (index + 1).ToString(), name, index + 1);
 				}
 
-				epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
-				if (book.Chapters.Count > 1)
-					epub.AddNavPoint(index < navs.Count ? navs[index] : book.Title + " - " + (index + 1).ToString(), name, index + 1);
+				// save into file on disc
+				var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
+				epub.Generate(filePath);
+
+				stopwatch.Stop();
+				if (this.IsDebugLogEnabled)
+					this.WriteLogs(correlationID, $"Generate EPUB file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}", null, this.ServiceName, "Generators");
+
+				// callback
+				onCompleted?.Invoke(filePath);
 			}
-
-			// save into file on disc
-			var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
-			epub.Generate(filePath, onCompleted, onError);
-
-			stopwatch.Stop();
-			if (this.IsDebugLogEnabled)
-				this.WriteLogs(correlationID, $"Generate EPUB file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}");
+			catch (Exception ex)
+			{
+				onError?.Invoke(ex);
+			}
 		}
 
 		void GenerateMobiFile(Book book, string correlationID = null, Action<string> onCompleted = null, Action<Exception> onError = null)
@@ -1465,9 +1481,9 @@ namespace net.vieapps.Services.Books
 			// generate
 			try
 			{
-				if (this.IsDebugLogEnabled)
-					this.WriteLogs(correlationID, $"Start to generate MOBI file [{book.Name}]");
 				var stopwatch = Stopwatch.StartNew();
+				if (this.IsDebugLogEnabled)
+					this.WriteLogs(correlationID, $"Start to generate MOBI file [{book.Name}]", null, this.ServiceName, "Generators");
 
 				// prepare HTML
 				var stylesheet = !string.IsNullOrWhiteSpace(book.Stylesheet)
@@ -1656,7 +1672,7 @@ namespace net.vieapps.Services.Books
 
 						stopwatch.Stop();
 						if (this.IsDebugLogEnabled)
-							this.WriteLogs(correlationID, $"Generate MOBI file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}\r\n{output}");
+							this.WriteLogs(correlationID, $"Generate MOBI file is completed [{book.Name}] - Execution times: {stopwatch.GetElapsedTimes()}\r\n{output}", null, this.ServiceName, "Generators");
 
 						// callback
 						onCompleted?.Invoke(filePath + UtilityService.GetNormalizedFilename(book.Name) + ".mobi");
@@ -1690,7 +1706,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// get related account
-			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID).ConfigureAwait(false) ?? throw new InformationNotFoundException();
+			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 
 			// process bookmarks
 			switch (requestInfo.Verb)
@@ -1745,7 +1761,7 @@ namespace net.vieapps.Services.Books
 					};
 
 					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
-					await sessions.Where(session => session.Item4).ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage()
+					await sessions.Where(session => session.Item4).ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage
 					{
 						Type = "Books#Bookmarks",
 						DeviceID = session.Item2,

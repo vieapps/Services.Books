@@ -99,7 +99,7 @@ namespace net.vieapps.Services.Books
 						: "bmp";
 
 			await Task.WhenAll(
-				context.WriteAsync(fileInfo, $"image/{contentType}", null, eTag, cancellationToken),
+				context.WriteAsync(fileInfo, $"image/{contentType}; charset=utf-8", null, eTag, cancellationToken),
 				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Show file successful ({this.RequestUri})")
 			).ConfigureAwait(false);
 		}
@@ -163,7 +163,7 @@ namespace net.vieapps.Services.Books
 						: "octet-stream";
 
 			await Task.WhenAll(
-				context.WriteAsync(fileInfo, "application/" + contentType, UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken),
+				context.WriteAsync(fileInfo, $"application/{contentType}; charset=utf-8", UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken),
 				new CommunicateMessage
 				{
 					ServiceName = "Books",

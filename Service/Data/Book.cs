@@ -41,10 +41,10 @@ namespace net.vieapps.Services.Books
 			this.Credits = "";
 			this.TotalChapters = 0;
 			this.LastUpdated = DateTime.Now;
-			this.Counters = new List<CounterInfo>()
+			this.Counters = new List<CounterInfo>
 			{
-				new CounterInfo() { Type = "View" },
-				new CounterInfo() { Type = "Download" }
+				new CounterInfo { Type = "View" },
+				new CounterInfo { Type = "Download" }
 			};
 			this.RatingPoints = new List<RatingPoint>();
 			this.TOCs = new List<string>();
@@ -112,7 +112,7 @@ namespace net.vieapps.Services.Books
 		[JsonIgnore, BsonIgnore, Ignore]
 		public string PermanentID
 		{
-			set { this._PermanentID = value; }
+			set => this._PermanentID = value;
 			get
 			{
 				if (string.IsNullOrWhiteSpace(this._PermanentID))
@@ -146,14 +146,9 @@ namespace net.vieapps.Services.Books
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public string Name
-		{
-			get
-			{
-				return string.IsNullOrWhiteSpace(this.Title)
-					? ""
-					: this.Title.Trim() + (string.IsNullOrWhiteSpace(this.Author) ? "" : " - " + this.Author.Trim());
-			}
-		}
+			=> string.IsNullOrWhiteSpace(this.Title)
+				? ""
+				: this.Title.Trim() + (string.IsNullOrWhiteSpace(this.Author) ? "" : " - " + this.Author.Trim());
 		#endregion
 
 		#region IBusinessEntity Properties
@@ -168,20 +163,16 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region To JSON
-		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted)
-		{
-			return this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
-		}
+		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted) => this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
 
 		public JObject ToJson(bool addTypeOfExtendedProperties = false, Action<JObject> onPreCompleted = null, bool asNormalized = true)
-		{
-			return base.ToJson(addTypeOfExtendedProperties, obj =>
+			=> base.ToJson(addTypeOfExtendedProperties, json =>
 			{
 				if (asNormalized)
 				{
-					obj["Cover"] = this.GetCoverImageUri();
-					obj.Add(new JProperty("TOCs", new JArray()));
-					obj.Add(new JProperty("Files", this.GetFiles()));
+					json["Cover"] = this.GetCoverImageUri();
+					json["TOCs"] = new JArray();
+					json["Files"] = this.GetFiles();
 
 					var download = this.Counters.FirstOrDefault(c => c.Type.IsEquals("Download"));
 					if (download != null)
@@ -201,19 +192,18 @@ namespace net.vieapps.Services.Books
 						}
 
 						if (gotUpdated)
-							obj["Counters"] = this.Counters.ToJArray();
+							json["Counters"] = this.Counters.ToJArray();
 					}
 				}
-				onPreCompleted?.Invoke(obj);
+				onPreCompleted?.Invoke(json);
 			});
-		}
 
 		public JObject GetFiles()
 		{
-			var filePath = this.GetFolderPath() + @"\" + UtilityService.GetNormalizedFilename(this.Name);
+			var filePath = Path.Combine(this.GetFolderPath(), UtilityService.GetNormalizedFilename(this.Name));
 			var downloadUri = this.GetDownloadUri();
 
-			return new JObject()
+			return new JObject
 			{
 				{ "Epub", new JObject()
 					{
@@ -232,10 +222,8 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		internal static async Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default(CancellationToken))
-		{
-			return string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)
+			=> string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)
 				? null
 				: await Book.GetAsync<Book>(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), null, null, cancellationToken).ConfigureAwait(false);
-		}
 	}
 }

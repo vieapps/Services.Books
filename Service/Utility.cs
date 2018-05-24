@@ -20,24 +20,7 @@ namespace net.vieapps.Services.Books
 {
 	public static class Utility
 	{
-
-		#region Caching mechanism
-		static Utility()
-		{
-			Task.Run(async () =>
-			{
-				await Task.Delay(123).ConfigureAwait(false);
-				Utility.GetCache();
-			}).ConfigureAwait(false);
-		}
-
-		internal static Cache GetCache()
-		{
-			return Utility.Cache ?? (Utility.Cache = new Cache("VIEApps-Services-Books", UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>(), false, UtilityService.GetAppSetting("Cache:Provider"), Logger.GetLoggerFactory()));
-		}
-
-		internal static Cache Cache { get; private set; }
-		#endregion
+		public static Cache Cache { get; } = new Cache("VIEApps-Services-Books", UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>(), false, UtilityService.GetAppSetting("Cache:Provider"), Logger.GetLoggerFactory());
 
 		#region Configuration settings
 		static string _FilesHttpUri = null;
@@ -185,41 +168,19 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Working with folders & files
-		public static string GetFolderPathOfBook(string name)
-		{
-			return Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar().ToLower());
-		}
+		public static string GetFolderPathOfBook(string name) => Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar().ToLower());
 
-		public static string GetFolderPath(this Book book)
-		{
-			return Utility.GetFolderPathOfBook(book.Name);
-		}
+		public static string GetFolderPath(this Book book) => Utility.GetFolderPathOfBook(book.Name);
 
-		public static string GetFilePathOfBook(string name)
-		{
-			return Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name));
-		}
+		public static string GetFilePathOfBook(string name) => Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name));
 
-		public static string GetFilePathOfBook(string title, string author)
-		{
-			return Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
-		}
+		public static string GetFilePathOfBook(string title, string author) => Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
 
-		public static string GetFilePath(this Book book)
-		{
-			return Utility.GetFilePathOfBook(book.Name);
-		}
+		public static string GetFilePath(this Book book) => Utility.GetFilePathOfBook(book.Name);
 
-		public static string GetMediaFilePathOfBook(string uri, string name, string identifier)
-		{
-			var path = Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-");
-			return uri.Replace(Definitions.MediaURI, path);
-		}
+		public static string GetMediaFilePathOfBook(string uri, string name, string identifier) => uri.Replace(Definitions.MediaURI, Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-"));
 
-		public static string GetFileSize(string filePath)
-		{
-			return UtilityService.GetFileSize(filePath) ?? "generating...";
-		}
+		public static string GetFileSize(string filePath) => UtilityService.GetFileSize(filePath) ?? "generating...";
 		#endregion
 
 		#region Working with related data of JSON
@@ -257,16 +218,16 @@ namespace net.vieapps.Services.Books
 			return full;
 		}
 
-		public static async Task<Book> GetBookAsync(this Book book)
+		public static async Task<Book> GetBookAsync(this Book book, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var key = book.GetCacheKey() + ":json";
-			var full = await Utility.Cache.GetAsync<Book>(key).ConfigureAwait(false);
+			var full = await Utility.Cache.GetAsync<Book>(key, cancellationToken).ConfigureAwait(false);
 			if (full == null)
 			{
 				full = book.Clone();
 				if (File.Exists(book.GetFilePath() + ".json"))
-					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(book.GetFilePath() + ".json").ConfigureAwait(false)));
-				await Utility.Cache.SetAsFragmentsAsync(key, full).ConfigureAwait(false);
+					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(book.GetFilePath() + ".json", null, cancellationToken).ConfigureAwait(false)));
+				await Utility.Cache.SetAsFragmentsAsync(key, full, 0, cancellationToken).ConfigureAwait(false);
 			}
 			return full;
 		}
@@ -275,9 +236,9 @@ namespace net.vieapps.Services.Books
 		{
 			book.PermanentID = (json["PermanentID"] as JValue).Value as string;
 			book.SourceUrl = json["SourceUrl"] != null
-				? (json["SourceUrl"] as JValue).Value as string
+				? json.Get<string>("SourceUrl")
 				: json["SourceUri"] != null
-					? (json["SourceUri"] as JValue).Value as string
+					? json.Get<string>("SourceUri")
 					: "";
 
 			book.TOCs = new List<string>();
@@ -293,37 +254,25 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Working with URIs
-		public static string GetMediaFileUri(this Book book)
-		{
-			return Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/";
-		}
+		public static string GetMediaFileUri(this Book book) => Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/";
 
 		public static string GetCoverImageUri(this Book book)
-		{
-			return string.IsNullOrWhiteSpace(book.Cover)
+			=> string.IsNullOrWhiteSpace(book.Cover)
 				? book.GetMediaFileUri() + "no-media-file".Url64Encode() + "/no/cover/image.png"
 				: book.Cover.Replace(Definitions.MediaURI, book.GetMediaFileUri() + book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
 
-		}
-
 		public static string NormalizeMediaFileUris(this Book book, string content)
-		{
-			return string.IsNullOrWhiteSpace(content)
+			=> string.IsNullOrWhiteSpace(content)
 				? content
 				: content.Replace(Definitions.MediaURI, book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
-		}
 
 		public static string NormalizeMediaFilePaths(this string content, Book book)
-		{
-			return string.IsNullOrWhiteSpace(content)
+			=> string.IsNullOrWhiteSpace(content)
 				? content
 				: content.Replace(Definitions.MediaURI, Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, book.GetPermanentID() + "-"));
-		}
 
 		public static string GetDownloadUri(this Book book)
-		{
-			return Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
-		}
+			=> Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
 		#endregion
 
 		#region Statistics
@@ -436,11 +385,9 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		public static string GetPermanentID(this Book book)
-		{
-			return !string.IsNullOrWhiteSpace(book.PermanentID) && book.PermanentID.IsValidUUID()
+			=> !string.IsNullOrWhiteSpace(book.PermanentID) && book.PermanentID.IsValidUUID()
 				? book.PermanentID
 				: Utility.GetBookAttribute(book.GetFilePath() + ".json", "PermanentID") ?? book.ID;
-		}
 
 		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default(CancellationToken))
 		{
