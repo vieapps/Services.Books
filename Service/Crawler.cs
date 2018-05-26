@@ -51,10 +51,7 @@ namespace net.vieapps.Services.Books
 			this.MaxPages = UtilityService.GetAppSetting("Book:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
-			Task.Run(async () =>
-			{
-				await this.StartAsync(onUpdate, onCompleted, onError, cancellationToken).ConfigureAwait(false);
-			}).ConfigureAwait(false);
+			Task.Run(() => this.StartAsync(onUpdate, onCompleted, onError, cancellationToken)).ConfigureAwait(false);
 		}
 
 		async Task StartAsync(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
@@ -156,7 +153,7 @@ namespace net.vieapps.Services.Books
 			// prepare
 			try
 			{
-				await UtilityService.GetWebPageAsync("http://isach.info/robots.txt", null, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+				await UtilityService.GetWebPageAsync("https://isach.info/robots.txt", null, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 			}
 			catch { }
 

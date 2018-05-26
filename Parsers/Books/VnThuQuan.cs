@@ -52,7 +52,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get HTML of the book
-				this.SourceUrl = "http://vnthuquan.net/mobil/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
+				this.SourceUrl = "https://vnthuquan.net/mobil/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// parse to get details
@@ -134,7 +134,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					var tasks = new List<Task<List<string>>>();
 					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
-						tasks.Add(this.Chapters[index].IsStartsWith("http://vnthuquan.net")
+						tasks.Add(this.Chapters[index].IsStartsWith("https://vnthuquan.net")
 							? this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken)
 							: Task.FromResult<List<string>>(null)
 						);
@@ -142,7 +142,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 				else
 					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
-						if (this.Chapters[index].IsStartsWith("http://vnthuquan.net"))
+						if (this.Chapters[index].IsStartsWith("https://vnthuquan.net"))
 							await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
 			}
 
@@ -228,7 +228,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 								var info = UtilityService.GetFileParts(image, false);
 								image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
 								if (!image.IsStartsWith("http://"))
-									image  = "http://vnthuquan.net" + image;
+									image  = "https://vnthuquan.net" + image;
 								if (this.MediaFileUrls.IndexOf(image) < 0)
 									this.MediaFileUrls.Add(image);
 
@@ -346,7 +346,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 					if (!chapterId.Equals(bookID) || (chapterId.Equals(bookID) && this.Chapters.Count < 1))
 					{
-						var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + chapterId;
+						var chapterUrl = "https://vnthuquan.net/mobil/noidung.aspx?tid=" + chapterId;
 						this.Chapters.Add(chapterUrl);
 
 						start = data.PositionOf(">") + 1;
@@ -362,7 +362,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 			else
 			{
-				var chapterUrl = "http://vnthuquan.net/mobil/noidung.aspx?tid=" + bookID;
+				var chapterUrl = "https://vnthuquan.net/mobil/noidung.aspx?tid=" + bookID;
 				this.Chapters.Add(chapterUrl);
 			}
 		}
@@ -533,9 +533,9 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			while (start > -1)
 			{
 				end = body.PositionOf(">", start + 1);
-				var img = body.PositionOf("src=\"http://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
+				var img = body.PositionOf("src=\"https://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
 				if (img < 0)
-					img = body.PositionOf("src='http://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
+					img = body.PositionOf("src='https://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
 				if (img > -1 && end > img)
 				{
 					end = body.PositionOf("\"", img + 5);

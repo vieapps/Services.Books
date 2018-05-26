@@ -75,15 +75,17 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			{
 				this.CurrentPage = 0;
 				this.TotalPages = 0;
-				this.UrlPattern = "http://vnthuquan.net/mobil/?tranghientai={0}";
+				this.UrlPattern = "https://vnthuquan.net/mobil/?tranghientai={0}";
 			}
 			else if (this.CurrentPage >= this.TotalPages)
 				this.UrlPattern = null;
 
 			this.CurrentPage++;
 
-			this.UrlParameters = new List<string>();
-			this.UrlParameters.Add(this.CurrentPage.ToString());
+			this.UrlParameters = new List<string>
+			{
+				this.CurrentPage.ToString()
+			};
 
 			return this;
 		}
@@ -112,10 +114,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			}
 
 			// parse
-			using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
-			{
-				this.Parse(html);
-			}
+			this.Parse(html);
 
 			// callback when done
 			stopwatch.Stop();
@@ -168,7 +167,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				start = html.PositionOf("<a", start + 1) + 1;
 				start = html.PositionOf("href='", start + 1) + 6;
 				end = html.PositionOf("'", start + 1);
-				book.SourceUrl = "http://vnthuquan.net/mobil/" + html.Substring(start, end - start).Trim();
+				book.SourceUrl = "https://vnthuquan.net/mobil/" + html.Substring(start, end - start).Trim();
 
 				start = html.PositionOf("<p", start + 1);
 				start = html.PositionOf(">", start + 1) + 1;

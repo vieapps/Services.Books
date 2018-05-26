@@ -95,7 +95,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			{
 				this.TotalPages = 0;
 				this.CurrentPage = 0;
-				this.UrlPattern = "http://isach.info/mobile/most_reading.php?sort=last_update_date";
+				this.UrlPattern = "https://isach.info/mobile/most_reading.php?sort=last_update_date";
 			}
 			else if (this.CurrentPage >= this.TotalPages)
 			{
@@ -138,8 +138,8 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			this.UrlPattern = string.IsNullOrWhiteSpace(this.Category)
 				? null
 				: string.IsNullOrWhiteSpace(this.Char)
-					? "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&page={1}"
-					: "http://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&char={1}&page={2}";
+					? "https://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&page={1}"
+					: "https://isach.info/mobile/story.php?list=story&category={0}&order=last_update_date&char={1}&page={2}";
 			*/
 
 			this.UrlParameters = new List<string>();
@@ -242,7 +242,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 				try
 				{
 					await Task.Delay(UtilityService.GetRandomNumber(123, 456), cancellationToken).ConfigureAwait(false);
-					var book = await new Parsers.Books.ISach().ParseAsync("http://isach.info" + html.Substring(start, end - start).Trim(), null, null, cancellationToken).ConfigureAwait(false);
+					var book = await new Books.ISach().ParseAsync("https://isach.info" + html.Substring(start, end - start).Trim(), null, null, cancellationToken).ConfigureAwait(false);
 					this.BookParsers.Add(book);
 				}
 				catch { }
@@ -268,7 +268,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 					start = html.PositionOf("<a", start + 1);
 				start = html.PositionOf("href=\"", start + 1) + 6;
 				end = html.PositionOf("\"", start + 1);
-				book.SourceUrl = "http://isach.info/mobile/" + html.Substring(start, end - start).Trim();
+				book.SourceUrl = "https://isach.info/mobile/" + html.Substring(start, end - start).Trim();
 
 				start = html.PositionOf(">", start + 1) + 1;
 				end = html.PositionOf("</a>", start + 1);

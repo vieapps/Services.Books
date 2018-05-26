@@ -53,7 +53,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get HTML of the book
-				this.SourceUrl = "http://isach.info/mobile/story.php?story=" + (url ?? this.SourceUrl).GetIdentity();
+				this.SourceUrl = "https://isach.info/mobile/story.php?story=" + (url ?? this.SourceUrl).GetIdentity();
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// check permission
@@ -108,7 +108,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 
 			// fetch chapters
-			Func<Task> parallelFetch = async () =>
+			async Task parallelFetch()
 			{
 				var chaptersOfBigBook = 39;
 				var normalDelayMin = 456;
@@ -134,7 +134,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							break;
 						}
 
-						if (this.Chapters[index].IsStartsWith("http://isach.info"))
+						if (this.Chapters[index].IsStartsWith("https://isach.info"))
 							tasks.Add(Task.Run(async () =>
 							{
 								var delay = this.Chapters.Count > chaptersOfBigBook
@@ -155,25 +155,25 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							await Task.Delay(UtilityService.GetRandomNumber(longDelayMin, longDelayMax), cancellationToken).ConfigureAwait(false);
 					}
 				}
-			};
+			}
 
-			Func<Task> sequenceFetch = async () =>
+			async Task sequenceFetch()
 			{
 				var chaptersOfLargeBook = 69;
-				var mediumPausePointOfLargeBook = 6; 
+				var mediumPausePointOfLargeBook = 6;
 				var longPausePointOfLargeBook = 29;
-				var chaptersOfBigBook = 29; 
-				var mediumPausePointOfBigBook = 3; 
+				var chaptersOfBigBook = 29;
+				var mediumPausePointOfBigBook = 3;
 				var longPausePointOfBigBook = 14;
-				var normalDelayMin = 456; 
-				var normalDelayMax = 890; 
-				var mediumDelay = 4321; 
-				var longDelayOfBigBook = 7890; 
+				var normalDelayMin = 456;
+				var normalDelayMax = 890;
+				var mediumDelay = 4321;
+				var longDelayOfBigBook = 7890;
 				var longDelayOfLargeBook = 15431;
 
 				var totalChapters = 0;
 				for (var index = 0; index < this.Chapters.Count; index++)
-					if (this.Chapters[index].IsStartsWith("http://isach.info"))
+					if (this.Chapters[index].IsStartsWith("https://isach.info"))
 						totalChapters++;
 
 				var chapterCounter = 0;
@@ -182,7 +182,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					chapterIndex++;
 					var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-					if (chapterUrl.IsStartsWith("http://isach.info"))
+					if (chapterUrl.IsStartsWith("https://isach.info"))
 					{
 						var number = totalChapters > chaptersOfBigBook
 							? mediumPausePointOfLargeBook
@@ -203,7 +203,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					}
 					chapterCounter++;
 				}
-			};
+			}
 
 			if (this.Chapters.Count > (string.IsNullOrWhiteSpace(url) ? 0 : 1))
 			{
@@ -240,7 +240,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// prepare
 				var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-				if (!chapterUrl.IsStartsWith("http://isach.info"))
+				if (!chapterUrl.IsStartsWith("https://isach.info"))
 					return null;
 
 				// start
@@ -337,17 +337,17 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				start = start < 0 ? -1 : html.PositionOf("src='", start + 1);
 				end = start < 0 ? -1 : html.PositionOf("'", start + 5);
 				if (start > 0 && end > 0)
-					this.Cover = "http://isach.info" + html.Substring(start + 5, end - start - 5).Trim();
+					this.Cover = "https://isach.info" + html.Substring(start + 5, end - start - 5).Trim();
 			}
 
 			// get HTML of chapters
 			if (!string.IsNullOrWhiteSpace(this.Cover))
 			{
-				start = html.PositionOf("<a href='" + this.SourceUrl.Replace("http://isach.info", ""));
+				start = html.PositionOf("<a href='" + this.SourceUrl.Replace("https://isach.info", ""));
 				end = start < 0 ? -1 : html.PositionOf("'", start + 9);
 				if (start > -1 && end > -1)
 				{
-					var tocUrl = "http://isach.info" + html.Substring(start + 9, end - start - 9).Trim();
+					var tocUrl = "https://isach.info" + html.Substring(start + 9, end - start - 9).Trim();
 					await Task.Delay(UtilityService.GetRandomNumber(123, 432)).ConfigureAwait(false);
 					html = await UtilityService.GetWebPageAsync(tocUrl, this.SourceUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
 				}
@@ -377,7 +377,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 						var chapterUrl = html.Substring(start + 9, end - start - 9).Trim();
 						while (chapterUrl.StartsWith("/"))
 							chapterUrl = chapterUrl.Right(chapterUrl.Length - 1);
-						chapterUrl = (!chapterUrl.StartsWith("http://isach.info") ? "http://isach.info/mobile/" : "") + chapterUrl;
+						chapterUrl = (!chapterUrl.StartsWith("https://isach.info") ? "https://isach.info/mobile/" : "") + chapterUrl;
 						if (chapterUrl.PositionOf("&chapter=") < 0)
 							chapterUrl += "&chapter=0001";
 
@@ -512,7 +512,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					var info = UtilityService.GetFileParts(image, false);
 					image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
 					if (!image.IsStartsWith("http://"))
-						image = "http://isach.info" + image;
+						image = "https://isach.info" + image;
 					if (this.MediaFileUrls.IndexOf(image) < 0)
 						this.MediaFileUrls.Add(image);
 
