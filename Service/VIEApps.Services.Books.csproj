@@ -28,7 +28,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VIEApps.Components.Utility.Epub" Version="10.2.2.1806" />
+		<PackageReference Include="VIEApps.Components.Utility.Epub" Version="10.2.3.1806" />
 	</ItemGroup>
 
 	<ItemGroup>
