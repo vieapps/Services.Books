@@ -30,7 +30,7 @@ namespace net.vieapps.Services.Books
 			get
 			{
 				if (string.IsNullOrWhiteSpace(Utility._FilesHttpUri))
-					Utility._FilesHttpUri = UtilityService.GetAppSetting("HttpUri:Files", "https://afs.vieapps.net");
+					Utility._FilesHttpUri = UtilityService.GetAppSetting("HttpUri:Files", "https://fs.vieapps.net");
 				while (Utility._FilesHttpUri.EndsWith("/"))
 					Utility._FilesHttpUri = Utility._FilesHttpUri.Left(Utility._FilesHttpUri.Length - 1);
 				return Utility._FilesHttpUri;
