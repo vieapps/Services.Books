@@ -17,7 +17,7 @@ using net.vieapps.Components.Security;
 
 namespace net.vieapps.Services.Books
 {
-	public class FileHandler : FileHttpHandler
+	public class FileHandler : Services.FileHandler
 	{
 		ILogger Logger { get; set; }
 		Uri RequestUri { get; set; }
