@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -387,7 +388,17 @@ namespace net.vieapps.Services.Books
 
 			// generate files
 			else if ("files".IsEquals(objectIdentity))
-				return this.GenerateFiles(bookJson ?? book);
+			{
+				if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				{
+					var service = await this.GetUniqueServiceAsync("Windows").ConfigureAwait(false);
+					return service != null
+						? await service.ProcessRequestAsync(requestInfo, cancellationToken).ConfigureAwait(false)
+						: this.GenerateFiles(bookJson ?? book);
+				}
+				else
+					return this.GenerateFiles(bookJson ?? book);
+			}
 
 			// re-crawl
 			else if ("recrawl".IsEquals(objectIdentity))
