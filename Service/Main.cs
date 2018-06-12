@@ -24,8 +24,6 @@ namespace net.vieapps.Services.Books
 	{
 		public override string ServiceName => "Books";
 
-		public ServiceComponent() : base() { }
-
 		public override void Dispose()
 		{
 			if (this.Timers.Count > 0)
@@ -33,10 +31,7 @@ namespace net.vieapps.Services.Books
 			base.Dispose();
 		}
 
-		~ServiceComponent()
-		{
-			this.Dispose();
-		}
+		~ServiceComponent() => this.Dispose();
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, Func<ServiceBase, Task> nextAsync = null)
@@ -389,15 +384,20 @@ namespace net.vieapps.Services.Books
 			// generate files
 			else if ("files".IsEquals(objectIdentity))
 			{
-				if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+					return this.GenerateFiles(bookJson ?? book);
+
+				// switch to use service on Windows because the Amazon Kindle Tool is only available for Windows
+				else
 				{
 					var service = await this.GetUniqueServiceAsync("Windows").ConfigureAwait(false);
+					if (this.IsDebugLogEnabled)
+						await this.WriteLogsAsync(requestInfo.CorrelationID, $">>>>> Switch to use service of specific platform (Windows) to generate files - URI: net.vieapps.services.{this.GetUniqueServiceName("Windows")}").ConfigureAwait(false);
+
 					return service != null
 						? await service.ProcessRequestAsync(requestInfo, cancellationToken).ConfigureAwait(false)
 						: this.GenerateFiles(bookJson ?? book);
 				}
-				else
-					return this.GenerateFiles(bookJson ?? book);
 			}
 
 			// re-crawl
@@ -411,15 +411,12 @@ namespace net.vieapps.Services.Books
 
 			// book information
 			else
-				return book.ToJson(
-					false,
-					json =>
-					{
-						json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
-						if (book.TotalChapters < 2)
-							json["Body"] = bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : "";
-					}
-				);
+				return book.ToJson(false, json =>
+				{
+					json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
+					if (book.TotalChapters < 2)
+						json["Body"] = bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : "";
+				});
 		}
 
 		async Task<JObject> UpdateCounterAsync(Book book, string action, CancellationToken cancellationToken = default(CancellationToken))
