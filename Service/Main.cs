@@ -58,7 +58,7 @@ namespace net.vieapps.Services.Books
 
 				// register timers
 				this.RegisterTimers(args);
-
+				
 				// last action
 				if (nextAsync != null)
 					try
@@ -82,13 +82,13 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		public override async Task<JObject> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
+		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var stopwatch = Stopwatch.StartNew();
 			this.Logger.LogInformation($"Begin request ({requestInfo.Verb} {requestInfo.URI}) [{requestInfo.CorrelationID}]");
 			try
 			{
-				JObject json = null;
+				JToken json = null;
 				switch (requestInfo.ObjectName.ToLower())
 				{
 					case "book":
@@ -122,6 +122,22 @@ namespace net.vieapps.Services.Books
 
 					case "authors":
 						json = this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+						break;
+
+					case "definitions":
+						switch (requestInfo.GetObjectIdentity())
+						{
+							case "categories":
+								json = Utility.Categories.List.Select(info => info.Name).ToList().ToJArray();
+								break;
+
+							case "book":
+								json = Book.GenerateFormControls<Book>();
+								break;
+
+							default:
+								throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
+						}
 						break;
 
 					default:
@@ -395,7 +411,7 @@ namespace net.vieapps.Services.Books
 						await this.WriteLogsAsync(requestInfo.CorrelationID, $">>>>> Switch to use service of specific platform (Windows) to generate files - URI: net.vieapps.services.{this.GetUniqueServiceName("Windows")}").ConfigureAwait(false);
 
 					return service != null
-						? await service.ProcessRequestAsync(requestInfo, cancellationToken).ConfigureAwait(false)
+						? await service.ProcessRequestAsync(requestInfo, cancellationToken).ConfigureAwait(false) as JObject
 						: this.GenerateFiles(bookJson ?? book);
 				}
 			}

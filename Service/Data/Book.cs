@@ -53,63 +53,63 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Properties
-		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable]
+		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
 		public override string Title { get; set; }
 
-		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable]
-		public string Author { get; set; }
-
-		[Property(MaxLength = 250), Searchable]
-		public string Translator { get; set; }
-
-		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info")]
-		public string Category { get; set; }
-
-		[Property(MaxLength = 250), Searchable]
+		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Original { get; set; }
 
-		[Property(MaxLength = 250)]
+		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		public string Author { get; set; }
+
+		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		public string Translator { get; set; }
+
+		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Publisher { get; set; }
 
-		[Property(MaxLength = 250)]
+		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Producer { get; set; }
 
-		[Property(MaxLength = 2)]
+		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info"), FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "books/definitions/categories")]
+		public string Category { get; set; }
+
+		[Property(MaxLength = 2), FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Language { get; set; }
 
-		[Property(MaxLength = 50), Sortable]
+		[Property(MaxLength = 50), Sortable, FormControl(Excluded = true)]
 		public string Status { get; set; }
 
-		[Property(MaxLength = 250)]
-		public string Cover { get; set; }
-
-		[Property(MaxLength = 250)]
-		public string Tags { get; set; }
-
-		[Sortable]
+		[Sortable, FormControl(Excluded = true)]
 		public DateTime LastUpdated { get; set; }
 
-		[AsJson]
+		[AsJson, FormControl(Excluded = true)]
 		public List<CounterInfo> Counters { get; set; }
 
-		[AsJson]
+		[AsJson, FormControl(Excluded = true)]
 		public List<RatingPoint> RatingPoints { get; set; }
 
-		[Property(MaxLength = 250)]
+		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Source { get; set; }
 
-		[Property(MaxLength = 1000)]
+		[Property(MaxLength = 1000), FormControl(Excluded = true)]
 		public string SourceUrl { get; set; }
 
-		[Property(MaxLength = 250)]
+		[Property(MaxLength = 250), FormControl(Hidden = true)]
+		public string Cover { get; set; }
+
+		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
+		public string Tags { get; set; }
+
+		[Property(MaxLength = 250), FormControl(Excluded = true)]
 		public string Contributor { get; set; }
 
-		[Sortable]
+		[Sortable, FormControl(Excluded = true)]
 		public int TotalChapters { get; set; }
 
 		string _PermanentID = "";
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[JsonIgnore, BsonIgnore, Ignore, FormControl(Excluded = true)]
 		public string PermanentID
 		{
 			set => this._PermanentID = value;
