@@ -36,7 +36,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Language { get; set; } = "vi";
 		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
-		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
+		public string ReferUrl { get; set; } = "https://vnthuquan.net/mobil/";
 		public List<string> TOCs { get; set; } = new List<string>();
 		public List<string> Chapters { get; set; } = new List<string>();
 		[JsonIgnore]
@@ -134,7 +134,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					var tasks = new List<Task<List<string>>>();
 					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
-						tasks.Add(this.Chapters[index].IsStartsWith("https://vnthuquan.net")
+						tasks.Add(this.Chapters[index].IsStartsWith("https://vnthuquan.net") || this.Chapters[index].IsStartsWith("http://vnthuquan.net")
 							? this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken)
 							: Task.FromResult<List<string>>(null)
 						);
@@ -142,7 +142,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 				else
 					for (var index = string.IsNullOrWhiteSpace(url) ? 0 : 1; index < this.Chapters.Count; index++)
-						if (this.Chapters[index].IsStartsWith("https://vnthuquan.net"))
+						if (this.Chapters[index].IsStartsWith("https://vnthuquan.net") || this.Chapters[index].IsStartsWith("http://vnthuquan.net"))
 							await this.FetchChapterAsync(index, onStartFetchChapter, onFetchChapterCompleted, onFetchChapterError, cancellationToken).ConfigureAwait(false);
 			}
 
@@ -173,7 +173,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// prepare
 				var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-				if (!chapterUrl.IsStartsWith("http://vnthuquan.net"))
+				if (!chapterUrl.IsStartsWith("https://vnthuquan.net") && !chapterUrl.IsStartsWith("http://vnthuquan.net"))
 					return null;
 
 				// start
@@ -227,7 +227,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							{
 								var info = UtilityService.GetFileParts(image, false);
 								image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
-								if (!image.IsStartsWith("http://"))
+								if (!image.IsStartsWith("https://") && !image.IsStartsWith("http://"))
 									image  = "https://vnthuquan.net" + image;
 								if (this.MediaFileUrls.IndexOf(image) < 0)
 									this.MediaFileUrls.Add(image);

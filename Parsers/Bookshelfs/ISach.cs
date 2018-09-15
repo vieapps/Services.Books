@@ -31,7 +31,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		public int CategoryIndex { get; set; } = 0;
 		public string Char { get; set; } = "0";
 		[JsonIgnore]
-		public string ReferUrl { get; set; } = "http://isach.info/mobile/index.php";
+		public string ReferUrl { get; set; } = "https://isach.info/mobile/index.php";
 
 		public static List<string> Categories
 		{
@@ -54,7 +54,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "isach.info.status.json";
 			var json = File.Exists(filePath)
 				? JObject.Parse(UtilityService.ReadTextFile(filePath))
-				: new JObject()
+				: new JObject
 				{
 					{ "TotalPages", 0 },
 					{ "CurrentPage", 0 },

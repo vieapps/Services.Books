@@ -438,7 +438,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> UpdateCounterAsync(Book book, string action, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// get and update
-			var counter = book.Counters.FirstOrDefault(c => c.Type.Equals(action));
+			var counter = book.Counters.FirstOrDefault(c => c.Type.IsEquals(action));
 			if (counter != null)
 			{
 				// update counters
@@ -543,18 +543,18 @@ namespace net.vieapps.Services.Books
 				}
 
 				// update JSON file
-				await UtilityService.WriteTextFileAsync(Utility.GetFilePathOfBook(bookJson.Name) + ".json", bookJson.ToJson(
-					false,
-					(json) =>
+				await UtilityService.WriteTextFileAsync(
+					Utility.GetFilePathOfBook(bookJson.Name) + ".json",
+					bookJson.ToJson(false, json =>
 					{
 						json.Remove("Counters");
 						json.Remove("RatingPoints");
 						json.Remove("LastUpdated");
-						json.Add(new JProperty("PermanentID", bookJson.GetPermanentID()));
-						json.Add(new JProperty("Credits", bookJson.Credits ?? ""));
-						json.Add(new JProperty("Stylesheet", bookJson.Stylesheet ?? ""));
-						json.Add(new JProperty("TOCs", bookJson.TOCs.ToJArray()));
-						json.Add(new JProperty("Chapters", bookJson.Chapters.ToJArray()));
+						json["PermanentID"] = bookJson.GetPermanentID();
+						json["Credits"] = bookJson.Credits ?? "";
+						json["Stylesheet"] = bookJson.Stylesheet ?? "";
+						json["TOCs"] = bookJson.TOCs.ToJArray();
+						json["Chapters"] = bookJson.Chapters.ToJArray();
 					},
 					false).ToString(Formatting.Indented)
 				).ConfigureAwait(false);
@@ -565,9 +565,9 @@ namespace net.vieapps.Services.Books
 					if (File.Exists(oldFilePath + ".json"))
 					{
 						var trashFilePath = Path.Combine(Utility.FolderOfTrashFiles, UtilityService.GetNormalizedFilename(name));
-						if (File.Exists(trashFilePath + ".json"))
-							File.Delete(trashFilePath + ".json");
-						File.Move(oldFilePath + ".json", trashFilePath + ".json");
+						if (File.Exists($"{trashFilePath}.json"))
+							File.Delete($"{trashFilePath}.json");
+						File.Move($"{oldFilePath}.json", $"{trashFilePath}.json");
 					}
 					UtilityService.MoveFiles(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder), Path.Combine(Utility.GetFolderPathOfBook(bookJson.Name), Definitions.MediaFolder), bookJson.GetPermanentID() + "-*.*");
 				}
@@ -609,9 +609,9 @@ namespace net.vieapps.Services.Books
 				this.ClearRelatedCacheAsync(book, !category.IsEquals(book.Category) ? category : null, !author.IsEquals(book.Author) ? author : null),
 				this.SendUpdateMessageAsync(new UpdateMessage()
 				{
-					Type = "Books#Book",
+					Type = "Books#Book#Update",
 					DeviceID = "*",
-					Data = (bookJson ?? book).ToJson(false, (json) => json["TOCs"] = tocs.ToJArray())
+					Data = (bookJson ?? book).ToJson(false, json => json["TOCs"] = tocs.ToJArray())
 				}, cancellationToken)
 			).ConfigureAwait(false);
 
@@ -716,9 +716,9 @@ namespace net.vieapps.Services.Books
 			var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
-				: sourceUrl.IsStartsWith("http://vnthuquan.net")
+				: sourceUrl.IsStartsWith("https://vnthuquan.net") || sourceUrl.IsStartsWith("http://vnthuquan.net")
 					? new Parsers.Books.VnThuQuan() as IBookParser
-					: sourceUrl.IsStartsWith("http://isach.info")
+					: sourceUrl.IsStartsWith("https://isach.info") || sourceUrl.IsStartsWith("http://isach.info")
 						? new Parsers.Books.ISach() as IBookParser
 						: null;
 
@@ -745,10 +745,7 @@ namespace net.vieapps.Services.Books
 				await crawler.CrawlAsync(
 					parser,
 					Utility.FolderOfTempFiles,
-					async (book, token) =>
-					{
-						await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false);
-					},
+					async (book, token) => await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false),
 					parser is Parsers.Books.ISach
 						? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
 						: UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(),
@@ -795,9 +792,9 @@ namespace net.vieapps.Services.Books
 
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
-				: sourceUrl.IsStartsWith("http://vnthuquan.net")
+				: sourceUrl.IsStartsWith("https://vnthuquan.net") || sourceUrl.IsStartsWith("http://vnthuquan.net")
 					? json.Copy<Parsers.Books.VnThuQuan>() as IBookParser
-					: sourceUrl.IsStartsWith("http://isach.info")
+					: sourceUrl.IsStartsWith("https://isach.info") || sourceUrl.IsStartsWith("http://isach.info")
 						? json.Copy<Parsers.Books.ISach>() as IBookParser
 						: null;
 
@@ -1787,7 +1784,7 @@ namespace net.vieapps.Services.Books
 					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
 					await sessions.Where(session => session.Item4).ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage
 					{
-						Type = "Books#Bookmarks",
+						Type = "Books#Bookmarks#Update",
 						DeviceID = session.Item2,
 						Data = data
 					}, token), cancellationToken).ConfigureAwait(false);
@@ -1895,12 +1892,9 @@ namespace net.vieapps.Services.Books
 
 			// scan new e-books
 			this.IsCrawlerRunning = false;
-			this.Crawler = new Crawler()
+			this.Crawler = new Crawler
 			{
-				UpdateLogs = (log, ex, updateCentralizedLogs) =>
-				{
-					this.WriteLogs(this.Crawler.CorrelationID, log, ex);
-				}
+				UpdateLogs = (log, ex, updateCentralizedLogs) => this.WriteLogs(this.Crawler.CorrelationID, log, ex)
 			};
 
 			var runAtStartup = UtilityService.GetAppSetting("Books:Crawler-RunAtStartup");

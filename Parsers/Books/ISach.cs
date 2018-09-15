@@ -37,7 +37,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Language { get; set; } = "vi";
 		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
-		public string ReferUrl { get; set; } = "http://isach.info/mobile/index.php";
+		public string ReferUrl { get; set; } = "https://isach.info/mobile/index.php";
 		public List<string> TOCs { get; set; } = new List<string>();
 		public List<string> Chapters { get; set; } = new List<string>();
 		[JsonIgnore]
@@ -134,7 +134,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							break;
 						}
 
-						if (this.Chapters[index].IsStartsWith("https://isach.info"))
+						if (this.Chapters[index].IsStartsWith("https://isach.info") || this.Chapters[index].IsStartsWith("http://isach.info"))
 							tasks.Add(Task.Run(async () =>
 							{
 								var delay = this.Chapters.Count > chaptersOfBigBook
@@ -173,7 +173,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				var totalChapters = 0;
 				for (var index = 0; index < this.Chapters.Count; index++)
-					if (this.Chapters[index].IsStartsWith("https://isach.info"))
+					if (this.Chapters[index].IsStartsWith("https://isach.info") || this.Chapters[index].IsStartsWith("http://isach.info"))
 						totalChapters++;
 
 				var chapterCounter = 0;
@@ -182,7 +182,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					chapterIndex++;
 					var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-					if (chapterUrl.IsStartsWith("https://isach.info"))
+					if (chapterUrl.IsStartsWith("https://isach.info") || chapterUrl.IsStartsWith("http://isach.info"))
 					{
 						var number = totalChapters > chaptersOfBigBook
 							? mediumPausePointOfLargeBook
@@ -240,7 +240,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// prepare
 				var chapterUrl = chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : "";
-				if (!chapterUrl.IsStartsWith("https://isach.info"))
+				if (!chapterUrl.IsStartsWith("https://isach.info") && !chapterUrl.IsStartsWith("http://isach.info"))
 					return null;
 
 				// start

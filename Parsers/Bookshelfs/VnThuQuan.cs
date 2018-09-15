@@ -31,7 +31,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		public int CategoryIndex { get; set; } = 0;
 		public string Char { get; set; } = "0";
 		[JsonIgnore]
-		public string ReferUrl { get; set; } = "http://vnthuquan.net/mobil/";
+		public string ReferUrl { get; set; } = "https://vnthuquan.net/mobil/";
 		#endregion
 
 		public IBookshelfParser Initialize(string folder = null)

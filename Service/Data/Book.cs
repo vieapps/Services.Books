@@ -109,7 +109,7 @@ namespace net.vieapps.Services.Books
 
 		string _PermanentID = "";
 
-		[JsonIgnore, BsonIgnore, Ignore, FormControl(Excluded = true)]
+		[JsonIgnore, BsonIgnore, Ignore]
 		public string PermanentID
 		{
 			set => this._PermanentID = value;
@@ -205,16 +205,16 @@ namespace net.vieapps.Services.Books
 
 			return new JObject
 			{
-				{ "Epub", new JObject()
+				{ "Epub", new JObject
 					{
-						{ "Size", Utility.GetFileSize(filePath + ".epub") },
-						{ "Url", downloadUri + ".epub" }
+						{ "Size", Utility.GetFileSize($"{filePath}.epub") },
+						{ "Url", $"{downloadUri}.epub" }
 					}
 				},
 				{ "Mobi", new JObject()
 					{
-						{ "Size", Utility.GetFileSize(filePath + ".mobi") },
-						{ "Url", downloadUri + ".mobi" }
+						{ "Size", Utility.GetFileSize($"{filePath}.mobi") },
+						{ "Url", $"{downloadUri}.mobi" }
 					}
 				}
 			};
