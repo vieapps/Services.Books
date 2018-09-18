@@ -524,12 +524,12 @@ namespace net.vieapps.Services.Books
 			if (bookJson != null)
 			{
 				bookJson.Title = book.Title;
-				bookJson.Original = book.Original = (book.Original ?? "");
-				bookJson.Author = book.Author;
-				bookJson.Publisher = book.Publisher = (book.Publisher ?? "");
-				bookJson.Producer = book.Producer = (book.Producer ?? "");
-				bookJson.Translator = book.Translator = (book.Translator ?? "");
-				bookJson.Category = book.Category;
+				bookJson.Original = book.Original ?? "";
+				bookJson.Author = book.Author ?? "";
+				bookJson.Publisher = book.Publisher ?? "";
+				bookJson.Producer = book.Producer ?? "";
+				bookJson.Translator = book.Translator ?? "";
+				bookJson.Category = book.Category ?? Utility.Categories[0].Name;
 				bookJson.LastUpdated = DateTime.Now;
 
 				// update TOCs
@@ -554,18 +554,19 @@ namespace net.vieapps.Services.Books
 				// update JSON file
 				await UtilityService.WriteTextFileAsync(
 					Utility.GetFilePathOfBook(bookJson.Name) + ".json",
-					bookJson.ToJson(false, json =>
-					{
-						json.Remove("Counters");
-						json.Remove("RatingPoints");
-						json.Remove("LastUpdated");
-						json["PermanentID"] = bookJson.GetPermanentID();
-						json["Credits"] = bookJson.Credits ?? "";
-						json["Stylesheet"] = bookJson.Stylesheet ?? "";
-						json["TOCs"] = bookJson.TOCs.ToJArray();
-						json["Chapters"] = bookJson.Chapters.ToJArray();
-					},
-					false).ToString(Formatting.Indented)
+					bookJson.ToJson(
+						false,
+						json =>
+						{
+							new[] { "Counters", "RatingPoints", "LastUpdated" }.ForEach(attr => json.Remove(attr));
+							json["PermanentID"] = bookJson.GetPermanentID();
+							json["Credits"] = bookJson.Credits ?? "";
+							json["Stylesheet"] = bookJson.Stylesheet ?? "";
+							json["TOCs"] = bookJson.TOCs.ToJArray();
+							json["Chapters"] = bookJson.Chapters.ToJArray();
+						},
+						false
+					).ToString(Formatting.Indented)
 				).ConfigureAwait(false);
 
 				// old files
@@ -872,24 +873,20 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessStatisticAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			// prepre
-			var objectIdentity = requestInfo.GetObjectIdentity();
-
-			// individual statistic
-			if ("status".IsEquals(objectIdentity))
-				return this.GetStatisticsOfServiceStatus();
-
-			else if ("categories".IsEquals(objectIdentity))
-				return this.GetStatisticsOfCategories();
-
-			else if ("authors".IsEquals(objectIdentity))
-				return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
-
-			// all statistics (via RTU)
-			else
+			switch ((requestInfo.GetObjectIdentity() ?? "").ToLower())
 			{
-				await this.SendStatisticsAsync(requestInfo.Session.DeviceID).ConfigureAwait(false);
-				return new JObject();
+				case "status":
+					return this.GetStatisticsOfServiceStatus();
+
+				case "categories":
+					return this.GetStatisticsOfCategories();
+
+				case "authors":
+					return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+
+				default:
+					await this.SendStatisticsAsync(requestInfo.Session.DeviceID).ConfigureAwait(false);
+					return new JObject();
 			}
 		}
 
@@ -1052,9 +1049,10 @@ namespace net.vieapps.Services.Books
 
 				case "PUT":
 					return this.UpdateProfileAsync(requestInfo, cancellationToken);
-			}
 
-			throw new MethodNotAllowedException(requestInfo.Verb);
+				default:
+					throw new MethodNotAllowedException(requestInfo.Verb);
+			}
 		}
 
 		#region Create an account profile
@@ -1722,22 +1720,17 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			// get related account
 			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
-
-			// process bookmarks
 			switch (requestInfo.Verb)
 			{
-				// get bookmarks
 				case "GET":
 					return new JObject
 					{
-						{"ID", account.ID },
-						{"Sync", true },
-						{ "Objects", account.Bookmarks.ToJArray() }
+						{ "ID", account.ID },
+						{ "Objects", account.Bookmarks.ToJArray() },
+						{ "Sync", true }
 					};
 
-				// update bookmarks
 				case "POST":
 					account.Bookmarks = (requestInfo.GetBodyJson() as JArray)
 						.Select(bookmark => bookmark.FromJson<Account.Bookmark>())
@@ -1752,11 +1745,10 @@ namespace net.vieapps.Services.Books
 
 					return new JObject
 					{
-						{"ID", account.ID },
+						{ "ID", account.ID },
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
-				// delete a bookmark
 				case "DELETE":
 					var id = requestInfo.GetObjectIdentity();
 					account.Bookmarks = account.Bookmarks
@@ -1770,7 +1762,7 @@ namespace net.vieapps.Services.Books
 
 					var data = new JObject
 					{
-						{"ID", account.ID },
+						{ "ID", account.ID },
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
