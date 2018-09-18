@@ -132,7 +132,7 @@ namespace net.vieapps.Services.Books
 								break;
 
 							case "book":
-								json = Book.GenerateFormControls<Book>();
+								json = this.GenerateFormControls<Book>();
 								break;
 
 							default:
@@ -255,7 +255,7 @@ namespace net.vieapps.Services.Books
 			// build result
 			pagination = new Tuple<long, int, int, int>(totalRecords, totalPages, pageSize, pageNumber);
 
-			var result = new JObject()
+			var result = new JObject
 			{
 				{ "FilterBy", (filter ?? new FilterBys<Book>()).ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
@@ -285,7 +285,16 @@ namespace net.vieapps.Services.Books
 				var filter = Filters<Book>.NotEquals("Status", "Inactive");
 				var sort = Sorts<Book>.Descending("LastUpdated");
 				var books = await Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey<Book>(filter, sort)}:1", this.CancellationTokenSource.Token).ConfigureAwait(false);
-				await this.SendUpdateMessagesAsync(books.Select(book => new BaseMessage() { Type = "Books#Book#Update", Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray()) }).ToList(), "*", null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+				await this.SendUpdateMessagesAsync(
+					books.Select(book => new BaseMessage
+					{
+						Type = $"{this.ServiceName}#Book#Update",
+						Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray())
+					}).ToList(),
+					"*",
+					null,
+					this.CancellationTokenSource.Token
+				).ConfigureAwait(false);
 			}
 			catch { }
 		}
@@ -359,7 +368,7 @@ namespace net.vieapps.Services.Books
 				{
 					DeviceID = "*",
 					ExcludedDeviceID = requestInfo.Session.DeviceID,
-					Type = "Books#Book#Counters",
+					Type = $"{this.ServiceName}#Book#Counters",
 					Data = result
 				}, cancellationToken).ConfigureAwait(false);
 
@@ -450,7 +459,7 @@ namespace net.vieapps.Services.Books
 				// reset counter of download
 				if (!"download".IsEquals(action))
 				{
-					var downloadCounter = book.Counters.FirstOrDefault(c => c.Type.Equals("download"));
+					var downloadCounter = book.Counters.FirstOrDefault(c => c.Type.IsEquals("download"));
 					if (downloadCounter != null)
 					{
 						if (!downloadCounter.LastUpdated.IsInCurrentWeek())
@@ -500,7 +509,7 @@ namespace net.vieapps.Services.Books
 
 			// old files to delete
 			var oldFilePath = Utility.GetFilePathOfBook(name);
-			var beDeletedFiles = new List<FileInfo>()
+			var beDeletedFiles = new List<FileInfo>
 			{
 				new FileInfo(oldFilePath + ".epub"),
 				new FileInfo(oldFilePath + ".mobi")
@@ -607,9 +616,9 @@ namespace net.vieapps.Services.Books
 			// clear related cached & send update message
 			await Task.WhenAll(
 				this.ClearRelatedCacheAsync(book, !category.IsEquals(book.Category) ? category : null, !author.IsEquals(book.Author) ? author : null),
-				this.SendUpdateMessageAsync(new UpdateMessage()
+				this.SendUpdateMessageAsync(new UpdateMessage
 				{
-					Type = "Books#Book#Update",
+					Type = $"{this.ServiceName}#Book#Update",
 					DeviceID = "*",
 					Data = (bookJson ?? book).ToJson(false, json => json["TOCs"] = tocs.ToJArray())
 				}, cancellationToken)
@@ -630,7 +639,7 @@ namespace net.vieapps.Services.Books
 
 #if DEBUG || UPDATELOGS
 			body.Remove("Cover");
-			await this.WriteLogsAsync(requestInfo.CorrelationID, new List<string>()
+			await this.WriteLogsAsync(requestInfo.CorrelationID, new List<string>
 			{
 				$"Update a book [{book.Name}]",
 				$"Request =>\r\n{body.ToJObject().ToString(Formatting.Indented)}",
@@ -677,11 +686,11 @@ namespace net.vieapps.Services.Books
 			await Task.WhenAll(
 				this.ClearRelatedCacheAsync(book),
 				this.UpdateStatiscticsAsync(book, true, cancellationToken),
-				this.SendUpdateMessageAsync(new UpdateMessage()
+				this.SendUpdateMessageAsync(new UpdateMessage
 				{
-					Type = "Books#Book#Delete",
+					Type = $"{this.ServiceName}#Book#Delete",
 					DeviceID = "*",
-					Data = new JObject()
+					Data = new JObject
 					{
 						{ "ID", book.ID },
 						{ "Category", book.Category },
@@ -733,13 +742,10 @@ namespace net.vieapps.Services.Books
 			parser.Contributor = requestInfo.Query.ContainsKey("contributor") ? requestInfo.Query["contributor"] : "";
 			try
 			{
-				var crawler = new Crawler()
+				var crawler = new Crawler
 				{
 					CorrelationID = correlationID,
-					UpdateLogs = (log, ex, updateCentralizedLogs) =>
-					{
-						this.WriteLogs(correlationID, log, ex);
-					}
+					UpdateLogs = (log, ex, updateCentralizedLogs) => this.WriteLogs(correlationID, log, ex)
 				};
 
 				await crawler.CrawlAsync(
@@ -827,22 +833,16 @@ namespace net.vieapps.Services.Books
 					}
 
 					// fetch
-					var crawler = new Crawler()
+					var crawler = new Crawler
 					{
 						CorrelationID = correlationID,
-						UpdateLogs = (log, ex, updateCentralizedLogs) =>
-						{
-							this.WriteLogs(correlationID, log, ex);
-						}
+						UpdateLogs = (log, ex, updateCentralizedLogs) => this.WriteLogs(correlationID, log, ex)
 					};
 
 					await crawler.CrawlAsync(
 						parser,
 						Utility.FolderOfTempFiles,
-						async (b, token) =>
-						{
-							await this.OnBookUpdatedAsync(b, token).ConfigureAwait(false);
-						},
+						async (b, token) => await this.OnBookUpdatedAsync(b, token).ConfigureAwait(false),
 						parser is Parsers.Books.ISach
 							? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
 							: UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(),
@@ -897,16 +897,16 @@ namespace net.vieapps.Services.Books
 		async Task SendStatisticsAsync(string deviceID = "*")
 		{
 			// prepare
-			var messages = new List<BaseMessage>()
+			var messages = new List<BaseMessage>
 			{
-				new BaseMessage()
+				new BaseMessage
 				{
-					Type = "Books#Statistic#Status",
+					Type = $"{this.ServiceName}#Statistic#Status",
 					Data = this.GetStatisticsOfServiceStatus()
 				},
-				new BaseMessage()
+				new BaseMessage
 				{
-					Type = "Books#Statistic#Categories",
+					Type = $"{this.ServiceName}#Statistic#Categories",
 					Data = this.GetStatisticsOfCategories()
 				}
 			};
@@ -914,10 +914,10 @@ namespace net.vieapps.Services.Books
 			Utility.Chars.ForEach(@char =>
 			{
 				var data = this.GetStatisticsOfAuthors(@char);
-				data.Add(new JProperty("Char", @char));
-				messages.Add(new BaseMessage()
+				data["Char"] = @char;
+				messages.Add(new BaseMessage
 				{
-					Type = "Books#Statistic#Authors",
+					Type = $"{this.ServiceName}#Statistic#Authors",
 					Data = data
 				});
 			});
@@ -936,22 +936,18 @@ namespace net.vieapps.Services.Books
 
 		#region Get statistics
 		JObject GetStatisticsOfServiceStatus()
-		{
-			return new JObject()
+			=> new JObject
 			{
 				{ "Total", Utility.Status.Count },
 				{ "Objects", Utility.Status.ToJson() }
 			};
-		}
 
 		JObject GetStatisticsOfCategories()
-		{
-			return new JObject()
+			=> new JObject
 			{
 				{ "Total", Utility.Categories.Count },
 				{ "Objects", Utility.Categories.ToJson() }
 			};
-		}
 
 		JObject GetStatisticsOfAuthors(string @char)
 		{
@@ -959,7 +955,7 @@ namespace net.vieapps.Services.Books
 				? Utility.Authors.List.OrderBy(item => item.FirstChar).OrderBy(item => item.Name).ToList()
 				: Utility.Authors.Find(@char).OrderBy(item => item.Name).ToList();
 
-			return new JObject()
+			return new JObject
 			{
 				{ "Total", authors.Count },
 				{ "Objects", authors.ToJArray(a => a.ToJson()) }
@@ -1009,7 +1005,7 @@ namespace net.vieapps.Services.Books
 							if (author != null)
 								author.Counters++;
 							else
-								Utility.Authors.Add(new StatisticInfo()
+								Utility.Authors.Add(new StatisticInfo
 								{
 									Name = a,
 									Counters = 1,
@@ -1022,12 +1018,12 @@ namespace net.vieapps.Services.Books
 
 			// status
 			Utility.Status.Clear();
-			Utility.Status.Add(new StatisticInfo()
+			Utility.Status.Add(new StatisticInfo
 			{
 				Name = "Books",
 				Counters = totalRecords.CastAs<int>()
 			});
-			Utility.Status.Add(new StatisticInfo()
+			Utility.Status.Add(new StatisticInfo
 			{
 				Name = "Authors",
 				Counters = Utility.Authors.Count
@@ -1117,7 +1113,7 @@ namespace net.vieapps.Services.Books
 			{
 				if (id.Equals(requestInfo.Session.User.ID))
 				{
-					account = new Account()
+					account = new Account
 					{
 						ID = id
 					};
@@ -1197,7 +1193,7 @@ namespace net.vieapps.Services.Books
 					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaFolder + @"\" + file.Name, true));
 			}
 
-			return new JObject()
+			return new JObject
 			{
 				{ "Status", "OK" }
 			};
@@ -1282,7 +1278,7 @@ namespace net.vieapps.Services.Books
 			// send the update message
 			await this.SendUpdateMessageAsync(new UpdateMessage
 			{
-				Type = "Books#Book#Files",
+				Type = $"{this.ServiceName}#Book#Files",
 				DeviceID = "*",
 				Data = new JObject
 				{
@@ -1743,11 +1739,8 @@ namespace net.vieapps.Services.Books
 
 				// update bookmarks
 				case "POST":
-					var bookmarks = requestInfo.GetBodyJson() as JArray;
-					foreach (JObject bookmark in bookmarks)
-						account.Bookmarks.Add(bookmark.FromJson<Account.Bookmark>());
-
-					account.Bookmarks = account.Bookmarks
+					account.Bookmarks = (requestInfo.GetBodyJson() as JArray)
+						.Select(bookmark => bookmark.FromJson<Account.Bookmark>())
 						.Distinct(new Account.BookmarkComparer())
 						.Where(b => Book.Get<Book>(b.ID) != null)
 						.OrderByDescending(b => b.Time)
@@ -1777,14 +1770,13 @@ namespace net.vieapps.Services.Books
 					var data = new JObject
 					{
 						{"ID", account.ID },
-						{"Sync", true },
 						{ "Objects", account.Bookmarks.ToJArray() }
 					};
 
 					var sessions = await this.GetSessionsAsync(requestInfo).ConfigureAwait(false);
 					await sessions.Where(session => session.Item4).ForEachAsync((session, token) => this.SendUpdateMessageAsync(new UpdateMessage
 					{
-						Type = "Books#Bookmarks#Update",
+						Type = $"{this.ServiceName}#Bookmarks#Update",
 						DeviceID = session.Item2,
 						Data = data
 					}, token), cancellationToken).ConfigureAwait(false);
@@ -1812,10 +1804,10 @@ namespace net.vieapps.Services.Books
 					if (book != null)
 					{
 						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString(), cancellationToken).ConfigureAwait(false);
-						await this.SendUpdateMessageAsync(new UpdateMessage()
+						await this.SendUpdateMessageAsync(new UpdateMessage
 						{
 							DeviceID = "*",
-							Type = "Books#Book#Counters",
+							Type = $"{this.ServiceName}#Book#Counters",
 							Data = result
 						}, cancellationToken).ConfigureAwait(false);
 					}
@@ -1979,9 +1971,9 @@ namespace net.vieapps.Services.Books
 			// clear related cached & send update message
 			await Task.WhenAll(
 				this.ClearRelatedCacheAsync(book),
-				this.SendUpdateMessageAsync(new UpdateMessage()
+				this.SendUpdateMessageAsync(new UpdateMessage
 				{
-					Type = "Books#Book#Update",
+					Type = $"{this.ServiceName}#Book#Update",
 					DeviceID = "*",
 					Data = book.ToJson(false, json => json["TOCs"] = book.TOCs.ToJArray())
 				}, cancellationToken)
@@ -1997,16 +1989,16 @@ namespace net.vieapps.Services.Books
 
 				await Task.WhenAll(
 					Utility.Cache.RemoveAsync($"{book.GetCacheKey()}:json"),
-					this.ClearRelatedCacheAsync<Book>(Utility.Cache, filter, sort),
-					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
-					this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
+					this.ClearRelatedCacheAsync(Utility.Cache, filter, sort),
+					this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
+					this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
 				).ConfigureAwait(false);
 
 				if (!string.IsNullOrWhiteSpace(category))
-					await this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", category), filter), sort).ConfigureAwait(false);
+					await this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", category), filter), sort).ConfigureAwait(false);
 
 				if (!string.IsNullOrWhiteSpace(author))
-					await this.ClearRelatedCacheAsync<Book>(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", author), filter), sort).ConfigureAwait(false);
+					await this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", author), filter), sort).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -2052,7 +2044,7 @@ namespace net.vieapps.Services.Books
 						author.Counters++;
 					else
 					{
-						Utility.Authors.Add(new StatisticInfo()
+						Utility.Authors.Add(new StatisticInfo
 						{
 							Name = a,
 							Counters = 1,

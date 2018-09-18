@@ -77,21 +77,9 @@ namespace net.vieapps.Services.Books
 
 		public class BookmarkComparer : IEqualityComparer<Bookmark>
 		{
-			public bool Equals(Bookmark x, Bookmark y)
-			{
-				return object.ReferenceEquals(x, y)
-					? true
-					: object.ReferenceEquals(x, null) || Object.ReferenceEquals(y, null)
-						? false
-						: x.ID.IsEquals(y.ID);
-			}
+			public bool Equals(Bookmark x, Bookmark y) => object.ReferenceEquals(x, y) ? true : x == null || y == null ? false : x.ID.IsEquals(y.ID);
 
-			public int GetHashCode(Bookmark bookmark)
-			{
-				return object.ReferenceEquals(bookmark, null)
-					? 0
-					: bookmark.ID.GetHashCode();
-			}
+			public int GetHashCode(Bookmark bookmark) => bookmark == null ? 0 : bookmark.ID.GetHashCode();
 		}
 		#endregion
 
