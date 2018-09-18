@@ -1741,6 +1741,7 @@ namespace net.vieapps.Services.Books
 				case "POST":
 					account.Bookmarks = (requestInfo.GetBodyJson() as JArray)
 						.Select(bookmark => bookmark.FromJson<Account.Bookmark>())
+						.Concat(account.Bookmarks)
 						.Distinct(new Account.BookmarkComparer())
 						.Where(b => Book.Get<Book>(b.ID) != null)
 						.OrderByDescending(b => b.Time)
