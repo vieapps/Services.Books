@@ -361,7 +361,7 @@ namespace net.vieapps.Services.Books
 			if ("counters".IsEquals(objectIdentity))
 			{
 				// update counters
-				var result = await this.UpdateCounterAsync(book, requestInfo.Query["action"] ?? "View", cancellationToken).ConfigureAwait(false);
+				var result = await this.UpdateCounterAsync(book, requestInfo.Query.ContainsKey("action") ? requestInfo.Query["action"] : "View", cancellationToken).ConfigureAwait(false);
 
 				// send update message
 				await this.SendUpdateMessageAsync(new UpdateMessage
@@ -550,6 +550,9 @@ namespace net.vieapps.Services.Books
 						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
 					bookJson.Cover = book.Cover = cover;
 				}
+
+				// chapters
+				book.TotalChapters = bookJson.TotalChapters = bookJson.Chapters.Count;
 
 				// update JSON file
 				await UtilityService.WriteTextFileAsync(
@@ -1895,11 +1898,7 @@ namespace net.vieapps.Services.Books
 				this.WriteLogs(this.Crawler.CorrelationID, "Start the crawler");
 				this.IsCrawlerRunning = true;
 				this.Crawler.Start(
-					async (book, token) =>
-					{
-						await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false);
-						await this.UpdateStatiscticsAsync(book, false, token).ConfigureAwait(false);
-					},
+					async (book, token) => await Task.WhenAll(this.OnBookUpdatedAsync(book, token), this.UpdateStatiscticsAsync(book, false, token)).ConfigureAwait(false),
 					(times) =>
 					{
 						this.WriteLogs(this.Crawler.CorrelationID,
@@ -1971,6 +1970,23 @@ namespace net.vieapps.Services.Books
 					Data = book.ToJson(false, json => json["TOCs"] = book.TOCs.ToJArray())
 				}, cancellationToken)
 			).ConfigureAwait(false);
+
+			// send update chapters
+			if (book.TotalChapters > 1)
+			{
+				var bookJson = await book.GetBookAsync(cancellationToken).ConfigureAwait(false);
+				await Task.WhenAll(bookJson.Chapters.Select((content, index) => this.SendUpdateMessageAsync(new UpdateMessage
+				{
+					Type = $"{this.ServiceName}#Book#Chapter",
+					DeviceID = "*",
+					Data = new JObject
+					{
+						{ "ID", book.ID },
+						{ "Chapter", index + 1 },
+						{ "Content", content }
+					}
+				}, cancellationToken)));
+			}
 		}
 
 		async Task ClearRelatedCacheAsync(Book book, string category = null, string author = null)
