@@ -315,8 +315,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				if (this.Author.PositionOf("<br>") > 0)
 				{
-					var data = this.Author.ToArray("<br>");
-					for (var index = 0; index < data.Length - 2; index++)
+					var data = this.Author.Replace(StringComparison.OrdinalIgnoreCase, "<br>", "<br>").ToArray("<br>");
+					for (var index = 0; index < data.Length - 1; index++)
 						this.Title += " " + data[index];
 					this.Author = data.Last();
 				}

@@ -39,7 +39,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "vnthuquan.net.status.json";
 			var json = File.Exists(filePath)
 				? JObject.Parse(UtilityService.ReadTextFile(filePath))
-				: new JObject()
+				: new JObject
 				{
 					{ "TotalPages", 0 },
 					{ "CurrentPage", 0 },
@@ -176,7 +176,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 				start = html.PositionOf("<h2>", start + 1) + 4;
 				end = html.PositionOf("</h2>", start + 1);
-				book.Title = html.Substring(start, end - start).GetNormalized();
+				book.Title = html.Substring(start, end - start).GetNormalized().Replace(StringComparison.OrdinalIgnoreCase, "<br>", " ");
 				if (book.Title.Equals(book.Title.ToUpper()))
 					book.Title = book.Title.ToLower().GetNormalized();
 
