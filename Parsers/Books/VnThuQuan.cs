@@ -184,7 +184,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				// get the HTML of the chapter
 				var contents = new List<string>();
 				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
-				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
+				using (cancellationToken.Register(() => { return; }))
 				{
 					var splitter = "--!!tach_noi_dung!!--";
 					var start = html.PositionOf(splitter);
@@ -198,7 +198,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				}
 
 				// parse the chapter
-				using (cancellationToken.Register(() => throw new OperationCanceledException(cancellationToken)))
+				using (cancellationToken.Register(() => { return; }))
 				{
 					var data = this.ParseChapter(contents);
 

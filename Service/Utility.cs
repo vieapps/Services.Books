@@ -264,7 +264,7 @@ namespace net.vieapps.Services.Books
 		public static string NormalizeMediaFileUris(this Book book, string content)
 			=> string.IsNullOrWhiteSpace(content)
 				? content
-				: content.Replace(Definitions.MediaURI, book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
+				: content.Replace(Definitions.MediaURI, book.GetMediaFileUri() + book.Title.Url64Encode() + "/" + book.GetPermanentID() + "/");
 
 		public static string NormalizeMediaFilePaths(this string content, Book book)
 			=> string.IsNullOrWhiteSpace(content)

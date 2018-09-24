@@ -729,9 +729,9 @@ namespace net.vieapps.Services.Books
 			var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
-				: sourceUrl.IsStartsWith("https://vnthuquan.net") || sourceUrl.IsStartsWith("http://vnthuquan.net")
+				: sourceUrl.IsContains("vnthuquan.net")
 					? new Parsers.Books.VnThuQuan() as IBookParser
-					: sourceUrl.IsStartsWith("https://isach.info") || sourceUrl.IsStartsWith("http://isach.info")
+					: sourceUrl.IsContains("isach.info")
 						? new Parsers.Books.ISach() as IBookParser
 						: null;
 
@@ -1983,7 +1983,7 @@ namespace net.vieapps.Services.Books
 					{
 						{ "ID", book.ID },
 						{ "Chapter", index + 1 },
-						{ "Content", content }
+						{ "Content", book.NormalizeMediaFileUris(content) }
 					}
 				}, cancellationToken)));
 			}
