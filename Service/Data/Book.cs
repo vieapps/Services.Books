@@ -21,91 +21,66 @@ namespace net.vieapps.Services.Books
 	[Entity(CollectionName = "Books", TableName = "T_Books_Books", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Book : Repository<Book>
 	{
-		public Book() : base()
-		{
-			this.ID = "";
-			this.Title = "";
-			this.Author = "";
-			this.Translator = "";
-			this.Category = "";
-			this.Original = "";
-			this.Publisher = "";
-			this.Producer = "";
-			this.Language = "vi";
-			this.Status = "";
-			this.Cover = "";
-			this.Tags = "";
-			this.Source = "";
-			this.SourceUrl = "";
-			this.Contributor = "";
-			this.Credits = "";
-			this.TotalChapters = 0;
-			this.LastUpdated = DateTime.Now;
-			this.Counters = new List<CounterInfo>
-			{
-				new CounterInfo { Type = "View" },
-				new CounterInfo { Type = "Download" }
-			};
-			this.RatingPoints = new List<RatingPoint>();
-			this.TOCs = new List<string>();
-			this.Chapters = new List<string>();
-			this.MediaFiles = new HashSet<string>();
-		}
+		public Book() : base() { }
 
 		#region Properties
 		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
-		public override string Title { get; set; }
+		public override string Title { get; set; } = "";
 
 		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Original { get; set; }
+		public string Original { get; set; } = "";
 
 		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Author { get; set; }
+		public string Author { get; set; } = "";
 
 		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Translator { get; set; }
+		public string Translator { get; set; } = "";
 
 		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Publisher { get; set; }
+		public string Publisher { get; set; } = "";
 
 		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Producer { get; set; }
+		public string Producer { get; set; } = "";
 
 		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info"), FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "books/definitions/categories")]
-		public string Category { get; set; }
+		public string Category { get; set; } = "";
 
 		[Property(MaxLength = 2), FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Language { get; set; }
+		public string Language { get; set; } = "vi";
 
 		[Property(MaxLength = 50), Sortable, FormControl(Excluded = true)]
-		public string Status { get; set; }
+		public string Status { get; set; } = "";
 
 		[Sortable, FormControl(Excluded = true)]
-		public DateTime LastUpdated { get; set; }
+		public DateTime LastUpdated { get; set; } = DateTime.Now;
 
 		[AsJson, FormControl(Excluded = true)]
-		public List<CounterInfo> Counters { get; set; }
+		public List<CounterInfo> Counters { get; set; } = new List<CounterInfo>
+		{
+			new CounterInfo { Type = "View" },
+			new CounterInfo { Type = "Download" }
+		};
 
 		[AsJson, FormControl(Excluded = true)]
-		public List<RatingPoint> RatingPoints { get; set; }
+		public List<RatingPoint> RatingPoints { get; set; } = new List<RatingPoint>();
 
 		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Source { get; set; }
+		public string Source { get; set; } = "";
 
 		[Property(MaxLength = 1000), FormControl(Excluded = true)]
-		public string SourceUrl { get; set; }
+		public string SourceUrl { get; set; } = "";
 
 		[Property(MaxLength = 250), FormControl(Hidden = true)]
-		public string Cover { get; set; }
+		public string Cover { get; set; } = "";
 
 		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
-		public string Tags { get; set; }
+		public string Tags { get; set; } = "";
 
 		[Property(MaxLength = 250), FormControl(Excluded = true)]
-		public string Contributor { get; set; }
+		public string Contributor { get; set; } = "";
 
 		[Sortable, FormControl(Excluded = true)]
-		public int TotalChapters { get; set; }
+		public int TotalChapters { get; set; } = 0;
 
 		string _PermanentID = "";
 
@@ -130,19 +105,19 @@ namespace net.vieapps.Services.Books
 		}
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public string Credits { get; set; }
+		public string Credits { get; set; } = "";
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public string Stylesheet { get; set; }
+		public string Stylesheet { get; set; } = "";
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public List<string> TOCs { get; set; }
+		public List<string> TOCs { get; set; } = new List<string>();
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public List<string> Chapters { get; set; }
+		public List<string> Chapters { get; set; } = new List<string>();
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public HashSet<string> MediaFiles { get; set; }
+		public HashSet<string> MediaFiles { get; set; } = new HashSet<string>();
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public string Name

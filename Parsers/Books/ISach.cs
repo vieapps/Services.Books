@@ -509,9 +509,9 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var image = body.Substring(start, end - start);
 				if (!image.IsStartsWith(Definitions.MediaURI))
 				{
-					var info = UtilityService.GetFileParts(image, false);
-					image = (info.Item1 + "/" + info.Item2).Replace(@"\", "/");
-					if (!image.IsStartsWith("http://"))
+					var filename = Path.GetFileName(image);
+					image = (image.Left(image.Length - filename.Length) + filename).Replace(@"\", "/");
+					if (!image.IsStartsWith("https://") && !image.IsStartsWith("http://"))
 						image = "https://isach.info" + image;
 					if (this.MediaFileUrls.IndexOf(image) < 0)
 						this.MediaFileUrls.Add(image);

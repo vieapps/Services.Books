@@ -24,6 +24,8 @@ namespace net.vieapps.Services.Books
 	{
 		public override string ServiceName => "Books";
 
+		~ServiceComponent() => this.Dispose();
+
 		public override void Dispose()
 		{
 			if (this.Timers.Count > 0)
@@ -31,46 +33,30 @@ namespace net.vieapps.Services.Books
 			base.Dispose();
 		}
 
-		~ServiceComponent() => this.Dispose();
-
 		#region Start
-		public override void Start(string[] args = null, bool initializeRepository = true, Func<ServiceBase, Task> nextAsync = null)
-		{
-			base.Start(args, initializeRepository, async (service) =>
+		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
+			=> base.Start(args, initializeRepository, async service =>
 			{
 				// prepare folders
 				if (Directory.Exists(Utility.FilesPath))
-					try
-					{
-						this.CreateFolder(Utility.FolderOfDataFiles, false);
-						Utility.Chars.ForEach(@char => this.CreateFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
-						this.CreateFolder(Utility.FolderOfStatisticFiles, false);
-						this.CreateFolder(Utility.FolderOfContributedFiles, false);
-						this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
-						this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
-						this.CreateFolder(Utility.FolderOfTempFiles);
-						this.CreateFolder(Utility.FolderOfTrashFiles);
-					}
-					catch (Exception ex)
-					{
-						await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while preparing the folders of the service", ex).ConfigureAwait(false);
-					}
+				{
+					this.CreateFolder(Utility.FolderOfDataFiles, false);
+					Utility.Chars.ForEach(@char => this.CreateFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
+					this.CreateFolder(Utility.FolderOfStatisticFiles, false);
+					this.CreateFolder(Utility.FolderOfContributedFiles, false);
+					this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
+					this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
+					this.CreateFolder(Utility.FolderOfTempFiles);
+					this.CreateFolder(Utility.FolderOfTrashFiles);
+				}
 
 				// register timers
 				this.RegisterTimers(args);
-				
+
 				// last action
 				if (nextAsync != null)
-					try
-					{
-						await nextAsync(service).ConfigureAwait(false);
-					}
-					catch (Exception ex)
-					{
-						await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while invoking the next action", ex).ConfigureAwait(false);
-					}
+					await nextAsync(service).ConfigureAwait(false);
 			});
-		}
 
 		void CreateFolder(string path, bool mediaFolders = true)
 		{
@@ -85,7 +71,7 @@ namespace net.vieapps.Services.Books
 		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var stopwatch = Stopwatch.StartNew();
-			this.Logger.LogInformation($"Begin request ({requestInfo.Verb} {requestInfo.URI}) [{requestInfo.CorrelationID}]");
+			this.Logger.LogInformation($"Begin request ({requestInfo.Verb} {requestInfo.GetURI()}) [{requestInfo.CorrelationID}]");
 			try
 			{
 				JToken json = null;
@@ -136,12 +122,12 @@ namespace net.vieapps.Services.Books
 								break;
 
 							default:
-								throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
+								throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
 						}
 						break;
 
 					default:
-						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.URI}]");
+						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
 				}
 				stopwatch.Stop();
 				this.Logger.LogInformation($"Success response - Execution times: {stopwatch.GetElapsedTimes()} [{requestInfo.CorrelationID}]");
@@ -222,7 +208,7 @@ namespace net.vieapps.Services.Books
 
 			// check cache
 			var cacheKey = string.IsNullOrWhiteSpace(query)
-				? this.GetCacheKey<Book>(filter, sort)
+				? this.GetCacheKey(filter, sort)
 				: "";
 
 			var json = !cacheKey.Equals("")
@@ -289,7 +275,7 @@ namespace net.vieapps.Services.Books
 					books.Select(book => new BaseMessage
 					{
 						Type = $"{this.ServiceName}#Book#Update",
-						Data = book.ToJson(false, (json) => json["TOCs"] = book.GetBook().TOCs.ToJArray())
+						Data = book.ToJson(false, json => json["TOCs"] = book.GetBook().TOCs.ToJArray())
 					}).ToList(),
 					"*",
 					null,
@@ -794,17 +780,13 @@ namespace net.vieapps.Services.Books
 
 			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(filepath).ConfigureAwait(false));
 			if (string.IsNullOrWhiteSpace(sourceUrl))
-				sourceUrl = json["SourceUrl"] != null
-					? (json["SourceUrl"] as JValue).Value.ToString()
-					: json["SourceUri"] != null
-						? (json["SourceUri"] as JValue).Value.ToString()
-						: null;
+				sourceUrl = json.Get<string>("SourceUrl") ?? json.Get<string>("SourceUri");
 
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
-				: sourceUrl.IsStartsWith("https://vnthuquan.net") || sourceUrl.IsStartsWith("http://vnthuquan.net")
+				: sourceUrl.IsContains("vnthuquan.net")
 					? json.Copy<Parsers.Books.VnThuQuan>() as IBookParser
-					: sourceUrl.IsStartsWith("https://isach.info") || sourceUrl.IsStartsWith("http://isach.info")
+					: sourceUrl.IsContains("isach.info")
 						? json.Copy<Parsers.Books.ISach>() as IBookParser
 						: null;
 
@@ -911,16 +893,16 @@ namespace net.vieapps.Services.Books
 				}
 			};
 
-			Utility.Chars.ForEach(@char =>
+			Utility.Chars.ForEach((Action<string>)(@char =>
 			{
 				var data = this.GetStatisticsOfAuthors(@char);
 				data["Char"] = @char;
-				messages.Add(new BaseMessage
+				messages.Add((BaseMessage)new Services.BaseMessage
 				{
 					Type = $"{this.ServiceName}#Statistic#Authors",
 					Data = data
 				});
-			});
+			}));
 
 			// send
 			try
@@ -1054,7 +1036,7 @@ namespace net.vieapps.Services.Books
 					return this.UpdateProfileAsync(requestInfo, cancellationToken);
 
 				default:
-					throw new MethodNotAllowedException(requestInfo.Verb);
+					return Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
 			}
 		}
 
@@ -1155,13 +1137,9 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		Task<JObject> ProcessFileAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
-		{
-			// convert file
-			if (requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert"))
-				return this.CopyFilesAsync(requestInfo, cancellationToken);
-
-			throw new MethodNotAllowedException(requestInfo.Verb);
-		}
+			=> requestInfo.Verb.IsEquals("POST") && requestInfo.Extra != null && requestInfo.Extra.ContainsKey("x-convert")
+				? this.CopyFilesAsync(requestInfo, cancellationToken)
+				: Task.FromException<JObject>(new MethodNotAllowedException(requestInfo.Verb));
 
 		#region Copy files of a book
 		async Task<JObject> CopyFilesAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
@@ -1808,7 +1786,7 @@ namespace net.vieapps.Services.Books
 						}, cancellationToken).ConfigureAwait(false);
 					}
 #if DEBUG
-					this.WriteLogs(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented));
+					await this.WriteLogsAsync(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 #endif
 				}
 				catch (Exception ex)
