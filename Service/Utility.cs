@@ -392,7 +392,7 @@ namespace net.vieapps.Services.Books
 		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			if (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
-				&& await Utility.Cache.ExistsAsync((parser.Title + " - " + parser.Author).Trim().ToLower().GetMD5()).ConfigureAwait(false))
+				&& await Utility.Cache.ExistsAsync((parser.Title + " - " + parser.Author).Trim().ToLower().GenerateUUID()).ConfigureAwait(false))
 				return true;
 
 			var filename = UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json";
@@ -402,7 +402,7 @@ namespace net.vieapps.Services.Books
 				return true;
 
 			return (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
-				? await Book.GetAsync<Book>((parser.Title + " - " + parser.Author).Trim().ToLower().GetMD5(), cancellationToken).ConfigureAwait(false)
+				? await Book.GetAsync<Book>((parser.Title + " - " + parser.Author).Trim().ToLower().GenerateUUID(), cancellationToken).ConfigureAwait(false)
 				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false)
 			) != null;
 		}

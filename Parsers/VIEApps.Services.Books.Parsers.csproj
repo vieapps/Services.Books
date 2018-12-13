@@ -4,6 +4,8 @@
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<RootNamespace>net.vieapps.Services.Books</RootNamespace>
 		<AssemblyName>VIEApps.Services.Books.Parsers</AssemblyName>
+		<WarningLevel>3</WarningLevel>
+		<DocumentationFile>bin\$(Configuration)\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
 		<AssemblyTitle>VIEApps NGX Books</AssemblyTitle>
 		<Authors>VIEApps.net</Authors>
 		<Company>VIEApps.net</Company>
@@ -12,18 +14,6 @@
 		<AssemblyVersion>10.2.1812.3</AssemblyVersion>
 		<FileVersion>10.2.1812.3</FileVersion>
 		<InformationalVersion>v10.2.netstandard-2+rev:2018.12.06-latest.components</InformationalVersion>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-		<WarningLevel>3</WarningLevel>
-		<DocumentationFile>bin\Debug\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
-		<NoWarn>1701;1702;1705;CS1066</NoWarn>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-		<WarningLevel>3</WarningLevel>
-		<DocumentationFile>bin\Release\netstandard2.0\VIEApps.Services.Books.Parsers.xml</DocumentationFile>
-		<NoWarn>1701;1702;1705;CS1066</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>

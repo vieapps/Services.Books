@@ -261,7 +261,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 		}
 
-		async Task<string> IBookParser.FetchChapterAsync(int chapterIndex, Action<int> onStart = null, Action<int, List<string>, long> onCompleted = null, Action<int, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		async Task<string> IBookParser.FetchChapterAsync(int chapterIndex, Action<int> onStart, Action<int, List<string>, long> onCompleted, Action<int, Exception> onError, CancellationToken cancellationToken)
 		{
 			await this.FetchChapterAsync(chapterIndex, onStart, onCompleted, onError, cancellationToken).ConfigureAwait(false);
 			return chapterIndex > -1 && chapterIndex < this.Chapters.Count ? this.Chapters[chapterIndex] : null;

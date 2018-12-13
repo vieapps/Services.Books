@@ -16,21 +16,12 @@ namespace net.vieapps.Services.Books
 	[Serializable]
 	public class Statistics
 	{
-		public Statistics()
-		{
-			this.List = new List<StatisticInfo>();
-		}
+		public Statistics() { }
 
 		#region Properties
-		public int Count
-		{
-			get
-			{
-				return this.List.Count;
-			}
-		}
+		public int Count => this.List.Count;
 
-		public List<StatisticInfo> List { get; private set; }
+		public List<StatisticInfo> List { get; } = new List<StatisticInfo>();
 		#endregion
 
 		#region Methods
@@ -191,16 +182,12 @@ namespace net.vieapps.Services.Books
 	[Serializable]
 	public class StatisticInfo
 	{
-		public StatisticInfo()
-		{
-			this.Name = "";
-			this.Counters = 0;
-		}
+		public StatisticInfo() { }
 
 		#region Properties
-		public string Name { get; set; }
+		public string Name { get; set; } = "";
 
-		public int Counters { get; set; }
+		public int Counters { get; set; } = 0;
 
 		[NonSerialized]
 		string _FirstChar = null;
@@ -208,10 +195,7 @@ namespace net.vieapps.Services.Books
 		[JsonIgnore]
 		public string FirstChar
 		{
-			set
-			{
-				this._FirstChar = value;
-			}
+			set => this._FirstChar = value;
 			get
 			{
 				if (this._FirstChar == null)

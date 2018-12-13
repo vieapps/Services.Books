@@ -17,16 +17,11 @@ namespace net.vieapps.Services.Books
 	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("Type = {Type}, Total = {Total}")]
 	public class CounterBase
 	{
+		public CounterBase() { }
 
-		public CounterBase()
-		{
-			this.Type = "View";
-			this.Total = 0;
-		}
+		public string Type { get; set; } = "View";
 
-		public string Type { get; set; }
-
-		public int Total { get; set; }
+		public int Total { get; set; } = 0;
 
 		public JObject ToJson(bool removeType = false)
 		{
@@ -40,19 +35,13 @@ namespace net.vieapps.Services.Books
 	[Serializable, BsonIgnoreExtraElements]
 	public class CounterInfo : CounterBase
 	{
+		public CounterInfo() : base() { }
 
-		public CounterInfo() : base()
-		{
-			this.LastUpdated = DateTime.Now;
-			this.Month = 0;
-			this.Week = 0;
-		}
+		public DateTime LastUpdated { get; set; } = DateTime.Now;
 
-		public DateTime LastUpdated { get; set; }
+		public int Month { get; set; } = 0;
 
-		public int Month { get; set; }
-
-		public int Week { get; set; }
+		public int Week { get; set; } = 0;
 
 		public new JObject ToJson(bool removeType = false)
 		{

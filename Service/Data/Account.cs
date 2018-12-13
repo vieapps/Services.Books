@@ -39,40 +39,21 @@ namespace net.vieapps.Services.Books
 	[Entity(CollectionName = "Accounts", TableName = "T_Books_Accounts", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Account : Repository<Account>
 	{
-		public Account() : base()
-		{
-			this.ID = "";
-			this.Level = Level.Normal;
-			this.Reputation = Reputation.Unknown;
-			this.TotalPoints = 0;
-			this.RestPoints = 0;
-			this.TotalRewards = 0;
-			this.TotalContributions = 0;
-			this.LastSync = DateTime.Now;
-			this.Favorites = new List<string>();
-			this.Bookmarks = new List<Bookmark>();
-			this.RatingPoints = new List<RatingPoint>();
-		}
+		public Account() : base() { }
 
 		#region Bookmark
 		[Serializable]
 		public class Bookmark
 		{
-			public string ID { get; set; }
+			public Bookmark() { }
 
-			public int Chapter { get; set; }
+			public string ID { get; set; } = "";
 
-			public int Position { get; set; }
+			public int Chapter { get; set; } = 0;
 
-			public DateTime Time { get; set; }
+			public int Position { get; set; } = 0;
 
-			public Bookmark()
-			{
-				this.ID = "";
-				this.Chapter = 0;
-				this.Position = 0;
-				this.Time = DateTime.Now;
-			}
+			public DateTime Time { get; set; } = DateTime.Now;
 		}
 
 		public class BookmarkComparer : IEqualityComparer<Bookmark>
@@ -85,34 +66,34 @@ namespace net.vieapps.Services.Books
 
 		#region Properties
 		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable(IndexName = "Statistics")]
-		public Level Level { get; set; }
+		public Level Level { get; set; } = Level.Normal;
 
 		[JsonConverter(typeof(StringEnumConverter)), BsonRepresentation(BsonType.String), Sortable(IndexName = "Statistics")]
-		public Reputation Reputation { get; set; }
+		public Reputation Reputation { get; set; } = Reputation.Unknown;
 
 		[Sortable(IndexName = "Statistics")]
-		public int TotalPoints { get; set; }
+		public int TotalPoints { get; set; } = 0;
 
 		[Sortable(IndexName = "Statistics")]
-		public int RestPoints { get; set; }
+		public int RestPoints { get; set; } = 0;
 
 		[Sortable(IndexName = "Statistics")]
-		public int TotalRewards { get; set; }
+		public int TotalRewards { get; set; } = 0;
 
 		[Sortable(IndexName = "Statistics")]
-		public int TotalContributions { get; set; }
+		public int TotalContributions { get; set; } = 0;
 
 		[Sortable(IndexName = "Statistics")]
-		public DateTime LastSync { get; set; }
+		public DateTime LastSync { get; set; } = DateTime.Now;
 
 		[JsonIgnore, AsJson]
-		public List<string> Favorites { get; set; }
+		public List<string> Favorites { get; set; } = new List<string>();
 
 		[JsonIgnore, AsJson]
-		public List<Bookmark> Bookmarks { get; set; }
+		public List<Bookmark> Bookmarks { get; set; } = new List<Bookmark>();
 
 		[AsJson]
-		public List<RatingPoint> RatingPoints { get; set; }
+		public List<RatingPoint> RatingPoints { get; set; } = new List<RatingPoint>();
 		#endregion
 
 		#region IBusinessEntity Properties

@@ -61,11 +61,10 @@ namespace net.vieapps.Services.Books
 				var stopwatch = new Stopwatch();
 				stopwatch.Start();
 
-				await Task.WhenAll(new List<Task>()
-				{
+				await Task.WhenAll(
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken) : Task.CompletedTask,
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunCrawlerOfISachAsync(onUpdate, cancellationToken) : Task.CompletedTask
-				}).ConfigureAwait(false);
+				).ConfigureAwait(false);
 
 				stopwatch.Stop();
 				onCompleted?.Invoke(stopwatch.ElapsedMilliseconds);

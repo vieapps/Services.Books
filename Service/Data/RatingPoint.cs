@@ -13,28 +13,16 @@ namespace net.vieapps.Services.Books
 	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("Type = {Type}, Average = {Average}, Total = {Total}")]
 	public class RatingPoint
 	{
+		public RatingPoint() { }
 
-		public RatingPoint()
-		{
-			this.Type = "General";
-			this.Points = 0.0d;
-			this.Total = 0;
-		}
+		public string Type { get; set; } = "General";
 
-		public string Type { get; set; }
+		public double Points { get; set; } = 0.0d;
 
-		public double Points { get; set; }
-
-		public int Total { get; set; }
+		public int Total { get; set; } = 0;
 
 		[BsonIgnore]
-		public double Average
-		{
-			get
-			{
-				return this.Total > 0 ? this.Points / this.Total : 0;
-			}
-		}
+		public double Average => this.Total > 0 ? this.Points / this.Total : 0;
 
 		public JObject ToJson(bool removeType = false)
 		{
