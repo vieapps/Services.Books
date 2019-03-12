@@ -142,18 +142,18 @@ namespace net.vieapps.Services.Books
 			var filePath = (string.IsNullOrWhiteSpace(path) ? "" : path.Trim() + Path.DirectorySeparatorChar.ToString()) + filename;
 
 			if (seperatedByFirstChar)
-				Utility.Chars.ForEach(@char =>
-				{
-					if (File.Exists(string.Format(filePath, @char)))
-						UtilityService.ReadTextFile(string.Format(filePath, @char))
-							.FromJson<List<StatisticInfo>>()
-							.ForEach(item => this.List.Add(new StatisticInfo()
-							{
-								Name = item.Name,
-								Counters = item.Counters,
-								FirstChar = @char.ToUpper()
-							}));
-				});
+				Utility.Chars
+					.Where(@char => File.Exists(string.Format(filePath, @char)))
+					.ForEach(@char => UtilityService.ReadTextFile(string.Format(filePath, @char))
+						.FromJson<List<StatisticInfo>>()
+						.Where(item => item != null)
+						.ForEach(item => this.List.Add(new StatisticInfo
+						{
+							Name = item.Name,
+							Counters = item.Counters,
+							FirstChar = @char.ToUpper()
+						}))
+					);
 
 			else if (File.Exists(filePath))
 				this.List.Append(UtilityService.ReadTextFile(filePath).FromJson<List<StatisticInfo>>());

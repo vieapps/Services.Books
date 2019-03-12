@@ -15,6 +15,7 @@ using Newtonsoft.Json.Linq;
 
 using net.vieapps.Components.Security;
 using net.vieapps.Components.Repository;
+using net.vieapps.Components.Caching;
 using net.vieapps.Components.Utility;
 #endregion
 
@@ -35,7 +36,12 @@ namespace net.vieapps.Services.Books
 
 		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
-			=> base.Start(args, initializeRepository, async service =>
+		{
+			// initialize caching storage
+			Utility.Cache = new Cache($"VIEApps-Services-{this.ServiceName}", Components.Utility.Logger.GetLoggerFactory());
+
+			// start the service
+			base.Start(args, initializeRepository, async service =>
 			{
 				// prepare folders
 				if (Directory.Exists(Utility.FilesPath))
@@ -57,6 +63,7 @@ namespace net.vieapps.Services.Books
 				if (nextAsync != null)
 					await nextAsync(service).ConfigureAwait(false);
 			});
+		}
 
 		void CreateFolder(string path, bool mediaFolders = true)
 		{
@@ -243,7 +250,7 @@ namespace net.vieapps.Services.Books
 
 			var result = new JObject
 			{
-				{ "FilterBy", (filter ?? new FilterBys<Book>()).ToClientJson(query) },
+				{ "FilterBy", (filter ?? Filters<Book>.NotEquals("Status", "Inactive")).ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
 				{ "Pagination", pagination.GetPagination() },
 				{ "Objects", objects.ToJsonArray() }
@@ -270,7 +277,7 @@ namespace net.vieapps.Services.Books
 			{
 				var filter = Filters<Book>.NotEquals("Status", "Inactive");
 				var sort = Sorts<Book>.Descending("LastUpdated");
-				var books = await Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey<Book>(filter, sort)}:1", this.CancellationTokenSource.Token).ConfigureAwait(false);
+				var books = await Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey(filter, sort)}:1", this.CancellationTokenSource.Token).ConfigureAwait(false);
 				await this.SendUpdateMessagesAsync(
 					books.Select(book => new BaseMessage
 					{
@@ -392,24 +399,9 @@ namespace net.vieapps.Services.Books
 					{ "Name", bookJson.Name }
 				};
 
-			// generate files
+			// generate ebook files
 			else if ("files".IsEquals(objectIdentity))
-			{
-				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-					return this.GenerateFiles(bookJson ?? book);
-
-				// switch to use service on Windows because the Amazon Kindle Tool is only available for Windows
-				else
-				{
-					var service = await this.GetUniqueServiceAsync("Windows").ConfigureAwait(false);
-					if (this.IsDebugLogEnabled)
-						await this.WriteLogsAsync(requestInfo.CorrelationID, $">>>>> Switch to use service of specific platform (Windows) to generate files - URI: net.vieapps.services.{this.GetUniqueServiceName("Windows")}").ConfigureAwait(false);
-
-					return service != null
-						? await service.ProcessRequestAsync(requestInfo, cancellationToken).ConfigureAwait(false) as JObject
-						: this.GenerateFiles(bookJson ?? book);
-				}
-			}
+				return this.GenerateFiles(bookJson ?? book);
 
 			// re-crawl
 			else if ("recrawl".IsEquals(objectIdentity))
@@ -1267,7 +1259,9 @@ namespace net.vieapps.Services.Books
 			}).ConfigureAwait(false);
 		}
 
-		public string CreditsInApp => "<p>Chuyển đổi và đóng gói bằng <b>VIEApps Online Books</b></p>";
+		public string CreditsApp => $"VIEApps NGX {this.ServiceName}";
+
+		public string CreditsInAppContributor => $"<p>Chuyển đổi và đóng gói bằng <b>{this.CreditsApp}</b></p>";
 
 		public string PageBreak => "<mbp:pagebreak/>";
 
@@ -1300,7 +1294,7 @@ namespace net.vieapps.Services.Books
 				epub.AddLanguage(book.Language);
 				epub.AddTitle(book.Title);
 				epub.AddAuthor(book.Author);
-				epub.AddMetaItem("dc:contributor", this.CreditsInApp.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
+				epub.AddMetaItem("dc:contributor", this.CreditsInAppContributor.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
 
 				if (!string.IsNullOrWhiteSpace(book.Translator))
 					epub.AddTranslator(book.Translator);
@@ -1382,8 +1376,7 @@ namespace net.vieapps.Services.Books
 				}
 
 				// pages & nav points
-				var pageTemplate =
-					@"<!DOCTYPE html>
+				var pageTemplate = @"<!DOCTYPE html>
 				<html xmlns=""http://www.w3.org/1999/xhtml"">
 					<head>
 						<title>{0}</title>
@@ -1420,7 +1413,7 @@ namespace net.vieapps.Services.Books
 
 				info += "<div class=\"credits\">"
 					+ (!string.IsNullOrWhiteSpace(book.Source) ? "<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + "<b><i>" + book.Source + "</i></b></p>" : "")
-					+ "\r" + "<hr/>" + this.CreditsInApp + "</div>";
+					+ "\r" + "<hr/>" + this.CreditsInAppContributor + "</div>";
 
 				epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
 
@@ -1557,7 +1550,7 @@ namespace net.vieapps.Services.Books
 					+ (!string.IsNullOrWhiteSpace(book.Publisher) ? "\n<p>" + (book.Language.Equals("en") ? "Publisher: " : "NXB: ") + book.Publisher + "</p>" : "")
 					+ (!string.IsNullOrWhiteSpace(book.Producer) ? "\n<p>" + (book.Language.Equals("en") ? "Producer: " : "Sản xuất: ") + book.Producer + "</p>" : "")
 					+ (!string.IsNullOrWhiteSpace(book.Source) ? "\n<p>" + (book.Language.Equals("en") ? "Source: " : "Nguồn: ") + book.Source + "</p>" : "")
-					+ "\n" + this.CreditsInApp + "\n\n";
+					+ "\n" + this.CreditsInAppContributor + "\n\n";
 
 				var headingTags = "h1|h2|h3|h4|h5|h6".Split('|');
 				var toc = "";
@@ -1625,7 +1618,7 @@ namespace net.vieapps.Services.Books
 					+ "<dc:Creator opf:role=\"aut\">" + book.Author + @"</dc:Creator>" + "\n"
 					+ (string.IsNullOrWhiteSpace(book.Publisher) ? "" : "<dc:Publisher>" + book.Publisher + "</dc:Publisher>" + "\n")
 					+ "<dc:Language>" + book.Language + "</dc:Language>" + "\n"
-					+ "<dc:Contributor>VIEApps Online Books</dc:Contributor>" + "\n"
+					+ "<dc:Contributor>" + this.CreditsApp + "</dc:Contributor>" + "\n"
 					+ "</metadata> " + "\n"
 					+ "<manifest>" + "\n"
 					+ "<item id=\"ncx\" media-type=\"application/x-dtbncx+xml\" href=\"" + filename + ".ncx\"/> " + "\n"
@@ -1646,7 +1639,7 @@ namespace net.vieapps.Services.Books
 				UtilityService.WriteTextFile(filePath + filename + ".opf", content, false);
 
 				// generate MOBI
-				var generator = UtilityService.GetAppSetting("Books:MobiFileGenerator", "VIEApps.Components.Utility.MOBIGenerator.dll");
+				var generator = UtilityService.GetAppSetting("Books:AmazonKindlegen", "AmazonKindlegen");
 				var output = "";
 
 				UtilityService.RunProcess(generator, "\"" + filePath + filename + ".opf\"",

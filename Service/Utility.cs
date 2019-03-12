@@ -12,7 +12,6 @@ using Newtonsoft.Json.Linq;
 using MongoDB.Bson.Serialization.Attributes;
 
 using net.vieapps.Components.Utility;
-using net.vieapps.Components.Caching;
 using net.vieapps.Components.Repository;
 #endregion
 
@@ -20,7 +19,7 @@ namespace net.vieapps.Services.Books
 {
 	public static class Utility
 	{
-		public static Cache Cache { get; } = new Cache("VIEApps-Services-Books", UtilityService.GetAppSetting("Cache:ExpirationTime", "30").CastAs<int>(), false, UtilityService.GetAppSetting("Cache:Provider"), Logger.GetLoggerFactory());
+		public static Components.Caching.Cache Cache { get; internal set; }
 
 		#region Configuration settings
 		static string _FilesHttpUri = null;
@@ -120,7 +119,7 @@ namespace net.vieapps.Services.Books
 			{
 				if (Utility._Chars == null)
 				{
-					Utility._Chars = new List<string>() { "0" };
+					Utility._Chars = new List<string> { "0" };
 					for (char @char = 'A'; @char <= 'Z'; @char++)
 						Utility._Chars.Add(@char.ToString());
 				}

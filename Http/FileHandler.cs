@@ -90,16 +90,8 @@ namespace net.vieapps.Services.Books
 				{ "Expires", DateTime.Now.AddDays(7).ToHttpString() }
 			});
 
-			var contentType = fileInfo.Name.IsEndsWith(".png")
-				? "png"
-				: fileInfo.Name.IsEndsWith(".jpg") || fileInfo.Name.IsEndsWith(".jpeg")
-					? "jpeg"
-					: fileInfo.Name.IsEndsWith(".gif")
-						? "gif"
-						: "bmp";
-
 			await Task.WhenAll(
-				context.WriteAsync(fileInfo, $"image/{contentType}; charset=utf-8", null, eTag, cancellationToken),
+				context.WriteAsync(fileInfo, $"{fileInfo.GetMimeType()}; charset=utf-8", null, eTag, cancellationToken),
 				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Show file successful ({this.RequestUri})")
 			).ConfigureAwait(false);
 		}
@@ -151,7 +143,7 @@ namespace net.vieapps.Services.Books
 			context.SetResponseHeaders((int)HttpStatusCode.OK, new Dictionary<string, string>
 			{
 				{ "Cache-Control", "public" },
-				{ "Expires", DateTime.Now.AddDays(7).ToHttpString() }
+				{ "Expires", DateTime.Now.AddHours(13).ToHttpString() }
 			});
 
 			var contentType = fileInfo.Name.IsEndsWith(".epub")
