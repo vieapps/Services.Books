@@ -78,7 +78,7 @@ namespace net.vieapps.Services.Books
 		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var stopwatch = Stopwatch.StartNew();
-			this.Logger.LogInformation($"Begin request ({requestInfo.Verb} {requestInfo.GetURI()}) [{requestInfo.CorrelationID}]");
+			this.WriteLogs(requestInfo, $"Begin request ({requestInfo.Verb} {requestInfo.GetURI()})");
 			try
 			{
 				JToken json = null;
@@ -105,7 +105,7 @@ namespace net.vieapps.Services.Books
 						break;
 
 					case "crawl":
-						var crawltask = Task.Run(() => this.CrawlBookAsync(requestInfo)).ConfigureAwait(false);
+						this.CrawlBook(requestInfo);
 						json = new JObject();
 						break;
 
@@ -120,6 +120,11 @@ namespace net.vieapps.Services.Books
 					case "definitions":
 						switch (requestInfo.GetObjectIdentity())
 						{
+							case "introductions":
+								var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.FolderOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cancellationToken).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
+								json = introduction.StartsWith("[") ? JArray.Parse(introduction) as JToken : JObject.Parse(introduction) as JToken;
+								break;
+
 							case "categories":
 								json = Utility.Categories.List.Select(info => info.Name).ToList().ToJArray();
 								break;
@@ -137,9 +142,9 @@ namespace net.vieapps.Services.Books
 						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
 				}
 				stopwatch.Stop();
-				this.Logger.LogInformation($"Success response - Execution times: {stopwatch.GetElapsedTimes()} [{requestInfo.CorrelationID}]");
+				this.WriteLogs(requestInfo, $"Success response - Execution times: {stopwatch.GetElapsedTimes()}");
 				if (this.IsDebugResultsEnabled)
-					this.Logger.LogInformation(
+					this.WriteLogs(requestInfo,
 						$"- Request: {requestInfo.ToJson().ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
 						$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
 					);
@@ -196,10 +201,10 @@ namespace net.vieapps.Services.Books
 			var request = requestInfo.GetRequestExpando();
 
 			var query = request.Get<string>("FilterBy.Query");
-
+			
 			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>();
 			if (filter == null)
-				filter = Filters<Book>.NotEquals("Status", "Inactive");
+				filter = Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
 			else if (filter is FilterBys<Book> && (filter as FilterBys<Book>).Children.FirstOrDefault(e => (e as FilterBy<Book>).Attribute.IsEquals("Status")) == null)
 				(filter as FilterBys<Book>).Children.Add(Filters<Book>.NotEquals("Status", "Inactive"));
 
@@ -230,7 +235,7 @@ namespace net.vieapps.Services.Books
 				? pagination.Item1
 				: string.IsNullOrWhiteSpace(query)
 					? await Book.CountAsync(filter, $"{cacheKey}total", cancellationToken).ConfigureAwait(false)
-					: await Book.CountByQueryAsync(query, filter, cancellationToken).ConfigureAwait(false);
+					: await Book.CountAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
 			var pageSize = pagination.Item3;
 
@@ -250,7 +255,7 @@ namespace net.vieapps.Services.Books
 
 			var result = new JObject
 			{
-				{ "FilterBy", (filter ?? Filters<Book>.NotEquals("Status", "Inactive")).ToClientJson(query) },
+				{ "FilterBy", filter.ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
 				{ "Pagination", pagination.GetPagination() },
 				{ "Objects", objects.ToJsonArray() }
@@ -269,27 +274,6 @@ namespace net.vieapps.Services.Books
 
 			// return the result
 			return result;
-		}
-
-		async Task SendLastUpdatedBooksAsync()
-		{
-			try
-			{
-				var filter = Filters<Book>.NotEquals("Status", "Inactive");
-				var sort = Sorts<Book>.Descending("LastUpdated");
-				var books = await Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey(filter, sort)}:1", this.CancellationTokenSource.Token).ConfigureAwait(false);
-				await this.SendUpdateMessagesAsync(
-					books.Select(book => new BaseMessage
-					{
-						Type = $"{this.ServiceName}#Book#Update",
-						Data = book.ToJson(false, json => json["TOCs"] = book.GetBook().TOCs.ToJArray())
-					}).ToList(),
-					"*",
-					null,
-					this.CancellationTokenSource.Token
-				).ConfigureAwait(false);
-			}
-			catch { }
 		}
 		#endregion
 
@@ -408,7 +392,7 @@ namespace net.vieapps.Services.Books
 			{
 				var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 				var fullRecrawl = requestInfo.Query.ContainsKey("full") && "true".IsEquals(requestInfo.Query["full"]);
-				var recrawl = Task.Run(() => this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl)).ConfigureAwait(false);
+				this.ReCrawlBook(book, sourceUrl, fullRecrawl);
 				return new JObject();
 			}
 
@@ -687,6 +671,19 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Crawl a book
+		void CrawlBook(RequestInfo requestInfo)
+			=> Task.Run(async () =>
+			{
+				try
+				{
+					await this.CrawlBookAsync(requestInfo).ConfigureAwait(false);
+				}
+				catch (Exception ex)
+				{
+					await this.WriteLogsAsync(requestInfo.CorrelationID, $"Error occurred while crawling => {ex.Message}", ex);
+				}
+			}).ConfigureAwait(false);
+
 		async Task CrawlBookAsync(RequestInfo requestInfo)
 		{
 			// check permissions
@@ -703,7 +700,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// prepare
-			var correlationID = UtilityService.NewUUID;
+			var correlationID = requestInfo.CorrelationID ?? UtilityService.NewUUID;
 			var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 			var parser = string.IsNullOrWhiteSpace(sourceUrl)
 				? null
@@ -752,6 +749,9 @@ namespace net.vieapps.Services.Books
 				await this.WriteLogsAsync(correlationID, $"Error occurred while crawling a book [{parser.Title} - {parser.SourceUrl}]", ex).ConfigureAwait(false);
 			}
 		}
+
+		void ReCrawlBook(Book book, string sourceUrl = null, bool fullRecrawl = false)
+			=> Task.Run(() => this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl)).ConfigureAwait(false);
 
 		async Task ReCrawlBookAsync(Book book, string sourceUrl = null, bool fullRecrawl = false)
 		{
@@ -959,7 +959,7 @@ namespace net.vieapps.Services.Books
 
 			// authors
 			Utility.Authors.Clear();
-			var totalRecords = await Book.CountAsync(null, null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+			var totalRecords = await Book.CountAsync(null, "", this.CancellationTokenSource.Token).ConfigureAwait(false);
 			var totalPages = new Tuple<long, int>(totalRecords, 50).GetTotalPages();
 			await this.WriteLogsAsync(correlationID, $"Total of {totalRecords} books need to process");
 
@@ -1799,8 +1799,14 @@ namespace net.vieapps.Services.Books
 			// last updated
 			this.StartTimer(async () =>
 			{
-				await this.SendLastUpdatedBooksAsync().ConfigureAwait(false);
-			}, 2 * 60 * 60);
+				try
+				{
+					await this.GetLastUpdatedBooksAsync().ConfigureAwait(false);
+				}
+				catch { }
+			}, 25 * 60);
+
+			this.StartTimer(async () => await this.SendLastUpdatedBooksAsync().ConfigureAwait(false), 2 * 60 * 60);
 
 			// delete old .EPUB & .MOBI files
 			this.StartTimer(() =>
@@ -1925,6 +1931,36 @@ namespace net.vieapps.Services.Books
 						await this.WriteLogsAsync(correlationID, "Error occurred while re-computing statistics", ex).ConfigureAwait(false);
 					}
 				}).ConfigureAwait(false);
+		}
+		#endregion
+
+		#region Last updated books
+		Task<List<Book>> GetLastUpdatedBooksAsync()
+		{
+			var filter = Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
+			var sort = Sorts<Book>.Descending("LastUpdated");
+			return Book.FindAsync(filter, sort, 20, 1, $"{this.GetCacheKey(filter, sort)}:1", this.CancellationTokenSource.Token);
+		}
+
+		async Task SendLastUpdatedBooksAsync()
+		{
+			try
+			{
+				var filter = Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
+				var sort = Sorts<Book>.Descending("LastUpdated");
+				var books = await this.GetLastUpdatedBooksAsync().ConfigureAwait(false);
+				await this.SendUpdateMessagesAsync(
+					books.Select(book => new BaseMessage
+					{
+						Type = $"{this.ServiceName}#Book#Update",
+						Data = book.ToJson(false, json => json["TOCs"] = book.GetBook().TOCs.ToJArray())
+					}).ToList(),
+					"*",
+					null,
+					this.CancellationTokenSource.Token
+				).ConfigureAwait(false);
+			}
+			catch { }
 		}
 		#endregion
 

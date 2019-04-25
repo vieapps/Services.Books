@@ -57,57 +57,32 @@ namespace net.vieapps.Services.Books
 		/// <summary>
 		/// Gets the folder of data files
 		/// </summary>
-		public static string FolderOfDataFiles
-		{
-			get
-			{
-				return Utility.FilesPath + "files";
-			}
-		}
+		public static string FolderOfDataFiles => Utility.FilesPath + "files";
 
 		/// <summary>
 		/// Gets the folder of statistic files
 		/// </summary>
-		public static string FolderOfStatisticFiles
-		{
-			get
-			{
-				return Utility.FilesPath + "statistics";
-			}
-		}
+		public static string FolderOfStatisticFiles => Utility.FilesPath + "statistics";
 
 		/// <summary>
 		/// Gets the folder of contributed files
 		/// </summary>
-		public static string FolderOfContributedFiles
-		{
-			get
-			{
-				return Utility.FilesPath + "contributions";
-			}
-		}
+		public static string FolderOfContributedFiles => Utility.FilesPath + "contributions";
 
 		/// <summary>
 		/// Gets the folder of temp files
 		/// </summary>
-		public static string FolderOfTempFiles
-		{
-			get
-			{
-				return Utility.FilesPath + "temp";
-			}
-		}
+		public static string FolderOfTempFiles => Utility.FilesPath + "temp";
 
 		/// <summary>
 		/// Gets the folder of trash files
 		/// </summary>
-		public static string FolderOfTrashFiles
-		{
-			get
-			{
-				return Utility.FilesPath + "trash";
-			}
-		}
+		public static string FolderOfTrashFiles => Utility.FilesPath + "trash";
+
+		/// <summary>
+		/// Gets the folder of introductions files
+		/// </summary>
+		public static string FolderOfIntroductionsFiles => Utility.FilesPath + "introductions";
 		#endregion
 
 		#region Avalable characters
