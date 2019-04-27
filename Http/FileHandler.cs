@@ -53,7 +53,7 @@ namespace net.vieapps.Services.Books
 			{
 				context.SetResponseHeaders((int)HttpStatusCode.NotModified, eTag, 0, "public", context.GetCorrelationID());
 				if (Global.IsDebugLogEnabled)
-					context.WriteLogs(this.Logger, "Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
+					context.WriteLogs(this.Logger, "Http.Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
 				return;
 			}
 
@@ -92,7 +92,7 @@ namespace net.vieapps.Services.Books
 
 			await Task.WhenAll(
 				context.WriteAsync(fileInfo, $"{fileInfo.GetMimeType()}; charset=utf-8", null, eTag, cancellationToken),
-				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Show file successful ({this.RequestUri})")
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Http.Books", $"Show file successful ({this.RequestUri})")
 			).ConfigureAwait(false);
 		}
 
@@ -106,7 +106,7 @@ namespace net.vieapps.Services.Books
 			{
 				context.SetResponseHeaders((int)HttpStatusCode.NotModified, eTag, 0, "public", context.GetCorrelationID());
 				if (Global.IsDebugLogEnabled)
-					context.WriteLogs(this.Logger, "Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
+					context.WriteLogs(this.Logger, "Http.Books", $"Response to request with status code 304 to reduce traffic ({this.RequestUri})");
 				return;
 			}
 
@@ -165,8 +165,8 @@ namespace net.vieapps.Services.Books
 						{ "UserID", context.User.Identity.Name },
 						{ "BookID", requestInfo[3].Url64Decode() },
 					}
-				}.PublishAsync(this.Logger),
-				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"Successfully download e-book file - User ID: {context.User.Identity.Name} - Book: {name}")
+				}.PublishAsync(this.Logger, "Http.Books"),
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Http.Books", $"Successfully download e-book file - User ID: {context.User.Identity.Name} - Book: {name}")
 			).ConfigureAwait(false);
 		}
 
@@ -261,7 +261,7 @@ namespace net.vieapps.Services.Books
 				{
 					{ "Uri", Definitions.MediaURI + fileName }
 				}, cancellationToken),
-				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Books", $"New cover image ({(context.GetHeaderParameter("x-as-base64") != null ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:#,##0} bytes)")
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Http.Books", $"New cover image ({(context.GetHeaderParameter("x-as-base64") != null ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:#,##0} bytes)")
 			).ConfigureAwait(false);
 		}
 	}
