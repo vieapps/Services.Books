@@ -172,11 +172,11 @@ namespace net.vieapps.Services.Books
 			if (!context.User.Identity.IsAuthenticated)
 				throw new AccessDeniedException();
 
-			var objectID = context.GetHeaderParameter("x-object-identity");
+			var objectID = context.GetParameter("object-identity") ?? context.GetParameter("x-book-id");
 			if (string.IsNullOrWhiteSpace(objectID))
 				throw new InvalidRequestException("Invalid object identity");
 
-			var isTemporary = "true".IsEquals(context.GetHeaderParameter("x-temporary"));
+			var isTemporary = "true".IsEquals(context.GetParameter("x-temporary"));
 			if (!isTemporary && !await context.CanEditAsync("Books", "Book", objectID).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
@@ -194,7 +194,9 @@ namespace net.vieapps.Services.Books
 			var filePath = Path.Combine(Utility.FolderOfDataFiles, info.Get<string>("Title").GetFirstChar(), Definitions.MediaFolder, info.Get<string>("PermanentID") + "-");
 			var fileName = (info.Get<string>("Title") + " - " + info.Get<string>("Author") + " - " + DateTime.Now.ToIsoString()).GenerateUUID();
 			var content = new byte[0];
-			var asBase64 = context.GetHeaderParameter("x-as-base64") != null;
+			var asBase64 = context.GetParameter("x-as-base64") != null;
+			if (!Int32.TryParse(UtilityService.GetAppSetting("Limits:BookCover"), out int limitSize))
+				limitSize = 1024 * 4;
 
 			// read content from base64 string
 			if (asBase64)
@@ -214,6 +216,12 @@ namespace net.vieapps.Services.Books
 
 				content = data.Last().Base64ToBytes();
 				fileSize = content.Length;
+
+				if (fileSize > limitSize * 1024)
+				{
+					context.SetResponseHeaders((int)HttpStatusCode.RequestEntityTooLarge, null, 0, "private", null);
+					return;
+				}
 			}
 
 			// read content from uploaded file of multipart/form-data
@@ -229,6 +237,12 @@ namespace net.vieapps.Services.Books
 
 				fileSize = (int)file.Length;
 				fileName += Path.GetExtension(file.FileName);
+
+				if (fileSize > limitSize * 1024)
+				{
+					context.SetResponseHeaders((int)HttpStatusCode.RequestEntityTooLarge, null, 0, "private", null);
+					return;
+				}
 
 				using (var stream = file.OpenReadStream())
 				{
@@ -254,7 +268,7 @@ namespace net.vieapps.Services.Books
 			};
 			await Task.WhenAll(
 				context.WriteAsync(response, cancellationToken),
-				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Http.Books", $"New cover image ({(asBase64 ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:#,##0} bytes)")
+				!Global.IsDebugLogEnabled ? Task.CompletedTask : context.WriteLogsAsync(this.Logger, "Http.Books", $"New cover image ({(asBase64 ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:###,###,###,###,##0} bytes)")
 			).ConfigureAwait(false);
 		}
 	}
