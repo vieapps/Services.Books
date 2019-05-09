@@ -25,37 +25,51 @@ namespace net.vieapps.Services.Books
 	{
 		public override string ServiceName => "Books";
 
-		~ServiceComponent() => this.Dispose();
-
-		public override void Dispose()
-		{
-			if (this.Timers.Count > 0)
-				this.FlushStatistics();
-			base.Dispose();
-		}
-
-		#region Start
 		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
 		{
 			// initialize caching storage
 			Utility.Cache = new Cache($"VIEApps-Services-{this.ServiceName}", Components.Utility.Logger.GetLoggerFactory());
 
+			// prepare URIs and paths
+			Utility.FilesURI = UtilityService.GetAppSetting("HttpUri:Files", "https://fs.vieapps.net");
+			while (Utility.FilesURI.EndsWith("/"))
+				Utility.FilesURI = Utility.FilesURI.Left(Utility.FilesURI.Length - 1);
+			Utility.FilesPath = UtilityService.GetAppSetting("Path:Books");
+			if (string.IsNullOrWhiteSpace(Utility.FilesPath))
+				Utility.FilesPath = Path.Combine(Directory.GetCurrentDirectory(), "data-files", "books");
+			if (!Utility.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+				Utility.FilesPath += Path.DirectorySeparatorChar.ToString();
+
+			// prepare folders
+			if (Directory.Exists(Utility.FilesPath))
+			{
+				void createFolder(string path, bool mediaFolders = true)
+				{
+					if (!Directory.Exists(path))
+						Directory.CreateDirectory(path);
+
+					if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
+						Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
+				}
+
+				createFolder(Utility.FolderOfDataFiles, false);
+				Utility.Chars.ForEach(@char => createFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
+				createFolder(Utility.FolderOfStatisticFiles, false);
+				createFolder(Utility.FolderOfContributedFiles, false);
+				createFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
+				createFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
+				createFolder(Utility.FolderOfTempFiles);
+				createFolder(Utility.FolderOfTrashFiles);
+			}
+
+			// characters
+			Utility.Chars = new List<string> { "0" };
+			for (char @char = 'A'; @char <= 'Z'; @char++)
+				Utility.Chars.Add(@char.ToString());
+
 			// start the service
 			base.Start(args, initializeRepository, async service =>
 			{
-				// prepare folders
-				if (Directory.Exists(Utility.FilesPath))
-				{
-					this.CreateFolder(Utility.FolderOfDataFiles, false);
-					Utility.Chars.ForEach(@char => this.CreateFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
-					this.CreateFolder(Utility.FolderOfStatisticFiles, false);
-					this.CreateFolder(Utility.FolderOfContributedFiles, false);
-					this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
-					this.CreateFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
-					this.CreateFolder(Utility.FolderOfTempFiles);
-					this.CreateFolder(Utility.FolderOfTrashFiles);
-				}
-
 				// register timers
 				this.RegisterTimers(args);
 
@@ -65,15 +79,14 @@ namespace net.vieapps.Services.Books
 			});
 		}
 
-		void CreateFolder(string path, bool mediaFolders = true)
+		public override void Dispose()
 		{
-			if (!Directory.Exists(path))
-				Directory.CreateDirectory(path);
-
-			if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
-				Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
+			if (this.Timers.Count > 0)
+				this.FlushStatistics();
+			base.Dispose();
 		}
-		#endregion
+
+		~ServiceComponent() => this.Dispose();
 
 		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
 		{
@@ -308,9 +321,7 @@ namespace net.vieapps.Services.Books
 
 			var id = !string.IsNullOrWhiteSpace(objectIdentity) && objectIdentity.IsValidUUID()
 				? objectIdentity
-				: requestInfo.Query.ContainsKey("id")
-					? requestInfo.Query["id"]
-					: null;
+				: requestInfo.GetQueryParameter("x-object-id") ?? requestInfo.GetQueryParameter("object-id") ?? requestInfo.GetQueryParameter("book-id") ?? requestInfo.GetQueryParameter("id");
 
 			var book = await Book.GetAsync<Book>(id, cancellationToken).ConfigureAwait(false);
 			if (book == null)
@@ -338,7 +349,7 @@ namespace net.vieapps.Services.Books
 			if ("counters".IsEquals(objectIdentity))
 			{
 				// update counters
-				var result = await this.UpdateCounterAsync(book, requestInfo.Query.ContainsKey("action") ? requestInfo.Query["action"] : "View", cancellationToken).ConfigureAwait(false);
+				var result = await this.UpdateCounterAsync(book, requestInfo.GetParameter("x-action") ?? requestInfo.GetParameter("action") ?? "View", cancellationToken).ConfigureAwait(false);
 
 				// send update message
 				await this.SendUpdateMessageAsync(new UpdateMessage
@@ -1754,40 +1765,6 @@ namespace net.vieapps.Services.Books
 					throw new MethodNotAllowedException(requestInfo.Verb);
 			}
 		}
-
-		#region Process inter-communicate messages
-		protected override async Task ProcessInterCommunicateMessageAsync(CommunicateMessage message, CancellationToken cancellationToken = default(CancellationToken))
-		{
-			// prepare
-			var data = message.Data?.ToExpandoObject();
-			if (data == null)
-				return;
-
-			// update counters
-			if (message.Type.IsEquals("Download") && !string.IsNullOrWhiteSpace(data.Get<string>("UserID")) && !string.IsNullOrWhiteSpace(data.Get<string>("BookID")))
-				try
-				{
-					var book = await Book.GetAsync<Book>(data.Get<string>("BookID"), cancellationToken).ConfigureAwait(false);
-					if (book != null)
-					{
-						var result = await this.UpdateCounterAsync(book, Components.Security.Action.Download.ToString(), cancellationToken).ConfigureAwait(false);
-						await this.SendUpdateMessageAsync(new UpdateMessage
-						{
-							DeviceID = "*",
-							Type = $"{this.ServiceName}#Book#Counters",
-							Data = result
-						}, cancellationToken).ConfigureAwait(false);
-					}
-#if DEBUG
-					await this.WriteLogsAsync(UtilityService.NewUUID, "Update counters successful" + "\r\n" + "=====>" + "\r\n" + message.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
-#endif
-				}
-				catch (Exception ex)
-				{
-					await this.WriteLogsAsync(UtilityService.NewUUID, "Error occurred while updating counters", ex).ConfigureAwait(false);
-				}
-		}
-		#endregion
 
 		#region Timers for working with background workers & schedulers
 		public Crawler Crawler { get; private set; }

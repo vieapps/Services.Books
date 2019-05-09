@@ -21,86 +21,24 @@ namespace net.vieapps.Services.Books
 	{
 		public static Components.Caching.Cache Cache { get; internal set; }
 
-		#region Configuration settings
-		static string _FilesHttpUri = null;
+		public static string FilesURI { get; internal set; }
 
-		static string FilesHttpUri
-		{
-			get
-			{
-				if (string.IsNullOrWhiteSpace(Utility._FilesHttpUri))
-					Utility._FilesHttpUri = UtilityService.GetAppSetting("HttpUri:Files", "https://fs.vieapps.net");
-				while (Utility._FilesHttpUri.EndsWith("/"))
-					Utility._FilesHttpUri = Utility._FilesHttpUri.Left(Utility._FilesHttpUri.Length - 1);
-				return Utility._FilesHttpUri;
-			}
-		}
+		public static string FilesPath { get; internal set; }
 
-		static string _FilesPath = null;
+		public static string FolderOfDataFiles => $"{Utility.FilesPath}files";
 
-		internal static string FilesPath
-		{
-			get
-			{
-				if (string.IsNullOrWhiteSpace(Utility._FilesPath))
-				{
-					Utility._FilesPath = UtilityService.GetAppSetting("Path:Books");
-					if (string.IsNullOrWhiteSpace(Utility._FilesPath))
-						Utility._FilesPath = Path.Combine(Directory.GetCurrentDirectory(), "data-files", "books");
-					if (!Utility._FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
-						Utility._FilesPath += Path.DirectorySeparatorChar.ToString();
-				}
-				return Utility._FilesPath;
-			}
-		}
+		public static string FolderOfStatisticFiles => $"{Utility.FilesPath}statistics";
 
-		/// <summary>
-		/// Gets the folder of data files
-		/// </summary>
-		public static string FolderOfDataFiles => Utility.FilesPath + "files";
+		public static string FolderOfContributedFiles => $"{Utility.FilesPath}contributions";
 
-		/// <summary>
-		/// Gets the folder of statistic files
-		/// </summary>
-		public static string FolderOfStatisticFiles => Utility.FilesPath + "statistics";
+		public static string FolderOfTempFiles => $"{Utility.FilesPath}temp";
 
-		/// <summary>
-		/// Gets the folder of contributed files
-		/// </summary>
-		public static string FolderOfContributedFiles => Utility.FilesPath + "contributions";
+		public static string FolderOfTrashFiles => $"{Utility.FilesPath}trash";
 
-		/// <summary>
-		/// Gets the folder of temp files
-		/// </summary>
-		public static string FolderOfTempFiles => Utility.FilesPath + "temp";
-
-		/// <summary>
-		/// Gets the folder of trash files
-		/// </summary>
-		public static string FolderOfTrashFiles => Utility.FilesPath + "trash";
-
-		/// <summary>
-		/// Gets the folder of introductions files
-		/// </summary>
-		public static string FolderOfIntroductionsFiles => Utility.FilesPath + "introductions";
-		#endregion
+		public static string FolderOfIntroductionsFiles => $"{Utility.FilesPath}introductions";
 
 		#region Avalable characters
-		static List<string> _Chars = null;
-
-		public static List<string> Chars
-		{
-			get
-			{
-				if (Utility._Chars == null)
-				{
-					Utility._Chars = new List<string> { "0" };
-					for (char @char = 'A'; @char <= 'Z'; @char++)
-						Utility._Chars.Add(@char.ToString());
-				}
-				return Utility._Chars;
-			}
-		}
+		public static List<string> Chars { get; internal set; }
 
 		public static string GetFirstChar(this string @string, bool userLower = true)
 		{
@@ -108,14 +46,13 @@ namespace net.vieapps.Services.Books
 			if (string.IsNullOrWhiteSpace(result))
 				return "0";
 
-			var specials = new string[] { "-", ".", "'", "+", "&", "“", "”" };
-			foreach (var special in specials)
+			new[] { "-", ".", "'", "+", "&", "“", "”" }.ForEach(special =>
 			{
 				while (result.StartsWith(special))
 					result = result.Right(result.Length - 1).Trim();
 				while (result.EndsWith(special))
 					result = result.Left(result.Length - 1).Trim();
-			}
+			});
 			if (string.IsNullOrWhiteSpace(result))
 				return "0";
 
@@ -142,19 +79,26 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Working with folders & files
-		public static string GetFolderPathOfBook(string name) => Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar().ToLower());
+		public static string GetFolderPathOfBook(this string name)
+			=> Path.Combine(Utility.FolderOfDataFiles, name.GetFirstChar().ToLower());
 
-		public static string GetFolderPath(this Book book) => Utility.GetFolderPathOfBook(book.Name);
+		public static string GetFolderPath(this Book book)
+			=> Utility.GetFolderPathOfBook(book.Name);
 
-		public static string GetFilePathOfBook(string name) => Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name));
+		public static string GetFilePathOfBook(this string name)
+			=> Path.Combine(Utility.GetFolderPathOfBook(name), UtilityService.GetNormalizedFilename(name));
 
-		public static string GetFilePathOfBook(string title, string author) => Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
+		public static string GetFilePathOfBook(this string title, string author)
+			=> Utility.GetFilePathOfBook(title.Trim() + (string.IsNullOrWhiteSpace(author) ? "" : " - " + author.GetAuthor()));
 
-		public static string GetFilePath(this Book book) => Utility.GetFilePathOfBook(book.Name);
+		public static string GetFilePath(this Book book)
+			=> Utility.GetFilePathOfBook(book.Name);
 
-		public static string GetMediaFilePathOfBook(string uri, string name, string identifier) => uri.Replace(Definitions.MediaURI, Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-"));
+		public static string GetMediaFilePathOfBook(this string uri, string name, string identifier)
+			=> uri.Replace(Definitions.MediaURI, Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-"));
 
-		public static string GetFileSize(string filePath) => UtilityService.GetFileSize(filePath) ?? "generating...";
+		public static string GetFileSize(this string filePath)
+			=> UtilityService.GetFileSize(filePath) ?? "generating...";
 		#endregion
 
 		#region Working with related data of JSON
@@ -228,7 +172,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Working with URIs
-		public static string GetMediaFileUri(this Book book) => Utility.FilesHttpUri + "/books/" + Definitions.MediaFolder + "/";
+		public static string GetMediaFileUri(this Book book) => Utility.FilesURI + "/books/" + Definitions.MediaFolder + "/";
 
 		public static string GetCoverImageUri(this Book book)
 			=> string.IsNullOrWhiteSpace(book.Cover)
@@ -246,7 +190,7 @@ namespace net.vieapps.Services.Books
 				: content.Replace(Definitions.MediaURI, Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, book.GetPermanentID() + "-"));
 
 		public static string GetDownloadUri(this Book book)
-			=> Utility.FilesHttpUri + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
+			=> Utility.FilesURI + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();
 		#endregion
 
 		#region Statistics

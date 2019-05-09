@@ -138,7 +138,8 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region To JSON
-		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted) => this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
+		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted)
+			=> this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
 
 		public JObject ToJson(bool addTypeOfExtendedProperties = false, Action<JObject> onPreCompleted = null, bool asNormalized = true)
 			=> base.ToJson(addTypeOfExtendedProperties, json =>
