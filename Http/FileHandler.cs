@@ -50,8 +50,11 @@ namespace net.vieapps.Services.Books
 				catch (OperationCanceledException) { }
 				catch (Exception ex)
 				{
-					await context.WriteLogsAsync(this.Logger, "Http.Books", $"Error occurred while processing with a file ({context.GetReferUri()})", ex, Global.ServiceName, LogLevel.Error).ConfigureAwait(false);
-					context.ShowHttpError(ex.GetHttpStatusCode(), ex.Message, ex.GetTypeName(true), context.GetCorrelationID(), ex, Global.IsDebugLogEnabled);
+					await context.WriteLogsAsync(this.Logger, "Http.Books", $"Error occurred while processing with a file ({context.Request.Method} {context.GetReferUri()})", ex, Global.ServiceName, LogLevel.Error).ConfigureAwait(false);
+					if (context.Request.Method.IsEquals("POST"))
+						context.WriteHttpError(ex.GetHttpStatusCode(), ex.Message, ex.GetTypeName(true), context.GetCorrelationID(), ex, Global.IsDebugLogEnabled);
+					else
+						context.ShowHttpError(ex.GetHttpStatusCode(), ex.Message, ex.GetTypeName(true), context.GetCorrelationID(), ex, Global.IsDebugLogEnabled);
 				}
 		}
 
@@ -95,12 +98,8 @@ namespace net.vieapps.Services.Books
 				throw new FileNotFoundException(pathSegments.Last() + " [" + name + "]");
 
 			// response
-			context.SetResponseHeaders((int)HttpStatusCode.OK, new Dictionary<string, string>
-			{
-				{ "Cache-Control", "public" },
-				{ "Expires", DateTime.Now.AddDays(7).ToHttpString() }
-			});
-			await context.WriteAsync(fileInfo, $"{fileInfo.GetMimeType()}; charset=utf-8", null, eTag, cancellationToken).ConfigureAwait(false);
+			context.SetResponseHeaders((int)HttpStatusCode.OK, fileInfo.GetMimeType(), eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
+			await context.WriteAsync(fileInfo, cancellationToken).ConfigureAwait(false);
 			if (Global.IsDebugLogEnabled)
 				await context.WriteLogsAsync(this.Logger, "Http.Books", $"Show file successful ({requestUri})").ConfigureAwait(false);
 		}
@@ -150,12 +149,6 @@ namespace net.vieapps.Services.Books
 				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
 
 			// response
-			context.SetResponseHeaders((int)HttpStatusCode.OK, new Dictionary<string, string>
-			{
-				{ "Cache-Control", "public" },
-				{ "Expires", DateTime.Now.AddHours(13).ToHttpString() }
-			});
-
 			var contentType = fileInfo.Name.IsEndsWith(".epub")
 				? "epub+zip"
 				: fileInfo.Name.IsEndsWith(".mobi")
@@ -164,7 +157,8 @@ namespace net.vieapps.Services.Books
 						? "json"
 						: "octet-stream";
 
-			await context.WriteAsync(fileInfo, $"application/{contentType}; charset=utf-8", UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken).ConfigureAwait(false);
+			context.SetResponseHeaders((int)HttpStatusCode.OK, $"application/{contentType}", eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
+			await context.WriteAsync(fileInfo, null, UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken).ConfigureAwait(false);
 			await Task.WhenAll(
 				context.CallServiceAsync(new RequestInfo(context.GetSession(), "Books", "Book", "GET")
 				{
@@ -191,7 +185,7 @@ namespace net.vieapps.Services.Books
 			if (string.IsNullOrWhiteSpace(objectID))
 				throw new InvalidRequestException("Invalid object identity");
 
-			var isTemporary = "true".IsEquals(context.GetParameter("x-temporary"));
+			var isTemporary = "true".IsEquals(context.GetParameter("is-temporary") ?? context.GetParameter("x-temporary"));
 			if (!isTemporary && !await context.CanEditAsync("Books", "Book", objectID).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
@@ -211,7 +205,7 @@ namespace net.vieapps.Services.Books
 			var content = new byte[0];
 			var asBase64 = context.GetParameter("x-as-base64") != null;
 			if (!Int32.TryParse(UtilityService.GetAppSetting("Limits:BookCover"), out var limitSize))
-				limitSize = 1024 * 4;
+				limitSize = 1024 * 2;
 
 			// read content from base64 string
 			if (asBase64)

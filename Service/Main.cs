@@ -40,6 +40,11 @@ namespace net.vieapps.Services.Books
 			if (!Utility.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
 				Utility.FilesPath += Path.DirectorySeparatorChar.ToString();
 
+			// characters
+			Utility.Chars = new List<string> { "0" };
+			for (char @char = 'A'; @char <= 'Z'; @char++)
+				Utility.Chars.Add(@char.ToString());
+
 			// prepare folders
 			if (Directory.Exists(Utility.FilesPath))
 			{
@@ -61,11 +66,6 @@ namespace net.vieapps.Services.Books
 				createFolder(Utility.FolderOfTempFiles);
 				createFolder(Utility.FolderOfTrashFiles);
 			}
-
-			// characters
-			Utility.Chars = new List<string> { "0" };
-			for (char @char = 'A'; @char <= 'Z'; @char++)
-				Utility.Chars.Add(@char.ToString());
 
 			// start the service
 			base.Start(args, initializeRepository, async service =>
