@@ -92,81 +92,82 @@ namespace net.vieapps.Services.Books
 		{
 			var stopwatch = Stopwatch.StartNew();
 			this.WriteLogs(requestInfo, $"Begin request ({requestInfo.Verb} {requestInfo.GetURI()})");
-			try
-			{
-				JToken json = null;
-				switch (requestInfo.ObjectName.ToLower())
+			using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.CancellationTokenSource.Token))
+				try
 				{
-					case "book":
-						json = await this.ProcessBookAsync(requestInfo, cancellationToken).ConfigureAwait(false);
-						break;
+					JToken json = null;
+					switch (requestInfo.ObjectName.ToLower())
+					{
+						case "book":
+							json = await this.ProcessBookAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
 
-					case "statistic":
-						json = await this.ProcessStatisticAsync(requestInfo, cancellationToken).ConfigureAwait(false);
-						break;
+						case "statistic":
+							json = await this.ProcessStatisticAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
 
-					case "profile":
-						json = await this.ProcessProfileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
-						break;
+						case "profile":
+							json = await this.ProcessProfileAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
 
-					case "file":
-						json = await this.ProcessFileAsync(requestInfo, cancellationToken).ConfigureAwait(false);
-						break;
+						case "file":
+							json = await this.ProcessFileAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
 
-					case "bookmarks":
-						json = await this.ProcessBookmarksAsync(requestInfo, cancellationToken).ConfigureAwait(false);
-						break;
+						case "bookmarks":
+							json = await this.ProcessBookmarksAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
 
-					case "crawl":
-						this.CrawlBook(requestInfo);
-						json = new JObject();
-						break;
+						case "crawl":
+							this.CrawlBook(requestInfo);
+							json = new JObject();
+							break;
 
-					case "categories":
-						json = this.GetStatisticsOfCategories();
-						break;
+						case "categories":
+							json = this.GetStatisticsOfCategories();
+							break;
 
-					case "authors":
-						json = this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
-						break;
+						case "authors":
+							json = this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
+							break;
 
-					case "definitions":
-						switch (requestInfo.GetObjectIdentity())
-						{
-							case "introductions":
-								var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.FolderOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cancellationToken).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
-								json = introduction.StartsWith("[") ? JArray.Parse(introduction) as JToken : JObject.Parse(introduction) as JToken;
-								break;
+						case "definitions":
+							switch (requestInfo.GetObjectIdentity())
+							{
+								case "introductions":
+									var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.FolderOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
+									json = introduction.StartsWith("[") ? JArray.Parse(introduction) as JToken : JObject.Parse(introduction) as JToken;
+									break;
 
-							case "categories":
-								json = Utility.Categories.List.Select(info => info.Name).ToList().ToJArray();
-								break;
+								case "categories":
+									json = Utility.Categories.List.Select(info => info.Name).ToList().ToJArray();
+									break;
 
-							case "book":
-								json = this.GenerateFormControls<Book>();
-								break;
+								case "book":
+									json = this.GenerateFormControls<Book>();
+									break;
 
-							default:
-								throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
-						}
-						break;
+								default:
+									throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
+							}
+							break;
 
-					default:
-						throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
+						default:
+							throw new InvalidRequestException($"The request is invalid [({requestInfo.Verb}): {requestInfo.GetURI()}]");
+					}
+					stopwatch.Stop();
+					this.WriteLogs(requestInfo, $"Success response - Execution times: {stopwatch.GetElapsedTimes()}");
+					if (this.IsDebugResultsEnabled)
+						this.WriteLogs(requestInfo,
+							$"- Request: {requestInfo.ToJson().ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
+							$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
+						);
+					return json;
 				}
-				stopwatch.Stop();
-				this.WriteLogs(requestInfo, $"Success response - Execution times: {stopwatch.GetElapsedTimes()}");
-				if (this.IsDebugResultsEnabled)
-					this.WriteLogs(requestInfo,
-						$"- Request: {requestInfo.ToJson().ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
-						$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
-					);
-				return json;
-			}
-			catch (Exception ex)
-			{
-				throw this.GetRuntimeException(requestInfo, ex, stopwatch);
-			}
+				catch (Exception ex)
+				{
+					throw this.GetRuntimeException(requestInfo, ex, stopwatch);
+				}
 		}
 
 		protected override List<Privilege> GetPrivileges(IUser user, Privileges privileges)
@@ -214,7 +215,7 @@ namespace net.vieapps.Services.Books
 			var request = requestInfo.GetRequestExpando();
 
 			var query = request.Get<string>("FilterBy.Query");
-			
+
 			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>();
 			if (filter == null)
 				filter = Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
@@ -319,17 +320,17 @@ namespace net.vieapps.Services.Books
 			// get the book
 			var objectIdentity = requestInfo.GetObjectIdentity();
 
-			var id = !string.IsNullOrWhiteSpace(objectIdentity) && objectIdentity.IsValidUUID()
+			var objectID = !string.IsNullOrWhiteSpace(objectIdentity) && objectIdentity.IsValidUUID()
 				? objectIdentity
 				: requestInfo.GetQueryParameter("x-object-id") ?? requestInfo.GetQueryParameter("object-id") ?? requestInfo.GetQueryParameter("book-id") ?? requestInfo.GetQueryParameter("id");
 
-			var book = await Book.GetAsync<Book>(id, cancellationToken).ConfigureAwait(false);
+			var book = await Book.GetAsync<Book>(objectID, cancellationToken).ConfigureAwait(false);
 			if (book == null)
 				throw new InformationNotFoundException();
 
 			// load from JSON file if has no chapter
 			Book bookJson = null;
-			if (id.Equals(objectIdentity) || "files".Equals(objectIdentity) || "brief-info".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
+			if (objectID.Equals(objectIdentity) || "files".Equals(objectIdentity) || "brief-info".Equals(objectIdentity) || requestInfo.Query.ContainsKey("chapter"))
 			{
 				bookJson = await book.GetBookAsync(cancellationToken).ConfigureAwait(false);
 				if (!book.SourceUrl.IsEquals(bookJson.SourceUrl))
