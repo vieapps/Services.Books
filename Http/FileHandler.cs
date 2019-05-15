@@ -186,7 +186,7 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException("Invalid object identity");
 
 			var isTemporary = "true".IsEquals(context.GetParameter("is-temporary") ?? context.GetParameter("x-temporary"));
-			if (!isTemporary && !await context.CanEditAsync("Books", "Book", objectID).ConfigureAwait(false))
+			if (!isTemporary && !await context.CanEditAsync("Books", "Book", null, null, objectID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -205,7 +205,7 @@ namespace net.vieapps.Services.Books
 			var content = new byte[0];
 			var asBase64 = context.GetParameter("x-as-base64") != null;
 			if (!Int32.TryParse(UtilityService.GetAppSetting("Limits:BookCover"), out var limitSize))
-				limitSize = 1024 * 2;
+				limitSize = 1024;
 
 			// read content from base64 string
 			if (asBase64)

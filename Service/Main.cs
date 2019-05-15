@@ -172,7 +172,7 @@ namespace net.vieapps.Services.Books
 
 		protected override List<Privilege> GetPrivileges(IUser user, Privileges privileges)
 			=> "book,category,statistic,profile".ToList()
-				.Select(objName => new Privilege(this.ServiceName, objName, null, this.GetPrivilegeRole(user)))
+				.Select(objectName => new Privilege(this.ServiceName, objectName, null, this.GetPrivilegeRole(user)))
 				.ToList();
 
 		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
@@ -701,7 +701,6 @@ namespace net.vieapps.Services.Books
 			// check permissions
 			if (!await this.IsAuthorizedAsync(
 				requestInfo.Session.User,
-				requestInfo.ServiceName,
 				"book",
 				null,
 				Components.Security.Action.Create,
