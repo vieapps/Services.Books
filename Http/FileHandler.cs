@@ -21,7 +21,7 @@ namespace net.vieapps.Services.Books
 	{
 		public override ILogger Logger { get; } = Components.Utility.Logger.CreateLogger<FileHandler>();
 
-		public override async Task ProcessRequestAsync(HttpContext context, CancellationToken cancellationToken = default(CancellationToken))
+		public override async Task ProcessRequestAsync(HttpContext context, CancellationToken cancellationToken)
 		{
 			if (string.IsNullOrWhiteSpace(FileHandlerExtensions.FilesPath))
 			{
@@ -32,30 +32,17 @@ namespace net.vieapps.Services.Books
 					FileHandlerExtensions.FilesPath += Path.DirectorySeparatorChar.ToString();
 			}
 
-			using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, context.RequestAborted))
-				try
-				{
-					if (context.Request.Method.IsEquals("GET") || context.Request.Method.IsEquals("HEAD"))
-					{
-						if (context.GetRequestUri().PathAndQuery.IsStartsWith("/books/download/"))
-							await this.DownloadAsync(context, cts.Token).ConfigureAwait(false);
-						else
-							await this.ShowAsync(context, cts.Token).ConfigureAwait(false);
-					}
-					else if (context.Request.Method.IsEquals("POST"))
-						await this.ReceiveAsync(context, cts.Token).ConfigureAwait(false);
-					else
-						throw new MethodNotAllowedException(context.Request.Method);
-				}
-				catch (OperationCanceledException) { }
-				catch (Exception ex)
-				{
-					await context.WriteLogsAsync(this.Logger, "Http.Books", $"Error occurred while processing with a file ({context.Request.Method} {context.GetReferUri()})", ex, Global.ServiceName, LogLevel.Error).ConfigureAwait(false);
-					if (context.Request.Method.IsEquals("POST"))
-						context.WriteHttpError(ex.GetHttpStatusCode(), ex.Message, ex.GetTypeName(true), context.GetCorrelationID(), ex, Global.IsDebugLogEnabled);
-					else
-						context.ShowHttpError(ex.GetHttpStatusCode(), ex.Message, ex.GetTypeName(true), context.GetCorrelationID(), ex, Global.IsDebugLogEnabled);
-				}
+			if (context.Request.Method.IsEquals("GET") || context.Request.Method.IsEquals("HEAD"))
+			{
+				if (context.GetRequestUri().PathAndQuery.IsStartsWith("/books/download/"))
+					await this.DownloadAsync(context, cancellationToken).ConfigureAwait(false);
+				else
+					await this.ShowAsync(context, cancellationToken).ConfigureAwait(false);
+			}
+			else if (context.Request.Method.IsEquals("POST"))
+				await this.ReceiveAsync(context, cancellationToken).ConfigureAwait(false);
+			else
+				throw new MethodNotAllowedException(context.Request.Method);
 		}
 
 		async Task ShowAsync(HttpContext context, CancellationToken cancellationToken)
@@ -86,12 +73,15 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException(ex);
 			}
 
-			if (!"no-media-file".IsEquals(name) && (pathSegments.Length < 5 || !pathSegments[3].IsValidUUID()))
+			var permanentID = pathSegments.Length > 3 ? pathSegments[3] : "";
+			var filename = pathSegments.Length > 4 ? pathSegments[4] : "";
+
+			if (!"no-media-file".IsEquals(name) && !permanentID.IsValidUUID())
 				throw new InvalidRequestException();
 
 			var filePath = "no-media-file".IsEquals(name)
 				? Path.Combine(FileHandlerExtensions.FolderOfDataFiles, "no-image.png")
-				: Path.Combine(FileHandlerExtensions.FolderOfDataFiles, name.GetFirstChar(), FileHandlerExtensions.MediaFolder, pathSegments[3] + "-" + pathSegments[4]);
+				: Path.Combine(FileHandlerExtensions.FolderOfDataFiles, name.GetFirstChar(), FileHandlerExtensions.MediaFolder, $"{permanentID}-{filename}");
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
@@ -119,54 +109,54 @@ namespace net.vieapps.Services.Books
 				return;
 			}
 
-			// check permissions
-			if (!context.User.Identity.IsAuthenticated)
-				throw new AccessDeniedException();
-
-			// parse
-			var requestInfo = requestUri.GetRequestPathSegments();
-			if (requestInfo.Length < 4)
+			// prepare
+			var pathSegments = requestUri.GetRequestPathSegments();
+			if (pathSegments.Length < 4)
 				throw new InvalidRequestException();
 
-			var ext = requestUrl.IsEndsWith(".epub")
-				? ".epub"
-				: requestUrl.IsEndsWith(".mobi")
-					? ".mobi"
-					: ".json";
-
-			var name = "";
+			string name = "", bookID = "";
 			try
 			{
-				name = requestInfo[2].Url64Decode();
+				name = pathSegments[2].Url64Decode();
+				bookID = pathSegments[3].Url64Decode();
 			}
 			catch (Exception ex)
 			{
 				throw new InvalidRequestException(ex);
 			}
 
-			var fileInfo = new FileInfo(name.GetFilePathOfBook() + ext);
+			// check permissions
+			if (!await context.CanDownloadAsync("Books", "Book", null, null, bookID, cancellationToken).ConfigureAwait(false))
+				throw new AccessDeniedException();
+
+			// check file
+			var extension = requestUrl.IsEndsWith(".epub")
+				? ".epub"
+				: requestUrl.IsEndsWith(".mobi")
+					? ".mobi"
+					: ".json";
+
+			var fileInfo = new FileInfo(name.GetFilePathOfBook() + extension);
 			if (!fileInfo.Exists)
-				throw new FileNotFoundException(requestInfo.Last() + " [" + name + "]");
+				throw new FileNotFoundException(pathSegments.Last() + $" [{name}]");
 
 			// response
 			var contentType = fileInfo.Name.IsEndsWith(".epub")
 				? "epub+zip"
 				: fileInfo.Name.IsEndsWith(".mobi")
 					? "x-mobipocket-ebook"
-					: fileInfo.Name.IsEndsWith(".json")
-						? "json"
-						: "octet-stream";
-
+					: fileInfo.Name.IsEndsWith(".json") ? "json" : "octet-stream";
 			context.SetResponseHeaders((int)HttpStatusCode.OK, $"application/{contentType}", eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
-			await context.WriteAsync(fileInfo, null, UtilityService.GetNormalizedFilename(name) + ext, eTag, cancellationToken).ConfigureAwait(false);
+			await context.WriteAsync(fileInfo, null, UtilityService.GetNormalizedFilename(name) + extension, eTag, cancellationToken).ConfigureAwait(false);
+
 			await Task.WhenAll(
-				context.CallServiceAsync(new RequestInfo(context.GetSession(), "Books", "Book", "GET")
+				context.CallServiceAsync(new RequestInfo(context.GetSession(), "Books", "Book")
 				{
 					Query = new Dictionary<string, string>
 					{
 						{ "object-identity", "counters" },
 						{ "x-action", Components.Security.Action.Download.ToString() },
-						{ "x-object-id", requestInfo[3].Url64Decode() },
+						{ "x-object-id", bookID },
 						{ "x-user-id", context.User.Identity.Name }
 					},
 					CorrelationID = context.GetCorrelationID()
@@ -177,10 +167,7 @@ namespace net.vieapps.Services.Books
 
 		async Task ReceiveAsync(HttpContext context, CancellationToken cancellationToken)
 		{
-			// check permissions
-			if (!context.User.Identity.IsAuthenticated)
-				throw new AccessDeniedException();
-
+			// prepare
 			var objectID = context.GetParameter("object-identity") ?? context.GetParameter("x-object-id") ?? context.GetParameter("object-id") ?? context.GetParameter("x-book-id") ?? context.GetParameter("id");
 			if (string.IsNullOrWhiteSpace(objectID))
 				throw new InvalidRequestException("Invalid object identity");
@@ -189,7 +176,6 @@ namespace net.vieapps.Services.Books
 			if (!isTemporary && !await context.CanEditAsync("Books", "Book", null, null, objectID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
-			// prepare
 			var info = await context.CallServiceAsync(new RequestInfo(context.GetSession(), "Books", "Book", "GET")
 			{
 				Query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -197,7 +183,7 @@ namespace net.vieapps.Services.Books
 					{ "object-identity", "brief-info" },
 					{ "x-object-id", objectID }
 				}
-			}, cancellationToken, this.Logger, "Http.Books").ConfigureAwait(false);
+			}, cancellationToken, this.Logger, "Http.Uploads").ConfigureAwait(false);
 
 			var fileSize = 0;
 			var filePath = Path.Combine(FileHandlerExtensions.FolderOfDataFiles, info.Get<string>("Title").GetFirstChar(), FileHandlerExtensions.MediaFolder, info.Get<string>("PermanentID") + "-");
@@ -276,7 +262,7 @@ namespace net.vieapps.Services.Books
 				{ "URI", FileHandlerExtensions.MediaURI + fileName }
 			}, cancellationToken).ConfigureAwait(false);
 			if (Global.IsDebugLogEnabled)
-				await context.WriteLogsAsync(this.Logger, "Http.Books", $"New cover image ({(asBase64 ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:###,###,###,###,##0} bytes)").ConfigureAwait(false);
+				await context.WriteLogsAsync(this.Logger, "Http.Uploads", $"New cover image ({(asBase64 ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:###,###,###,###,##0} bytes)").ConfigureAwait(false);
 		}
 	}
 

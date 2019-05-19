@@ -31,12 +31,10 @@ namespace net.vieapps.Services.Books
 			Utility.Cache = new Cache($"VIEApps-Services-{this.ServiceName}", Components.Utility.Logger.GetLoggerFactory());
 
 			// prepare URIs and paths
-			Utility.FilesURI = UtilityService.GetAppSetting("HttpUri:Files", "https://fs.vieapps.net");
+			Utility.FilesURI = this.GetHttpURI("Files", "https://fs.vieapps.net");
 			while (Utility.FilesURI.EndsWith("/"))
 				Utility.FilesURI = Utility.FilesURI.Left(Utility.FilesURI.Length - 1);
-			Utility.FilesPath = UtilityService.GetAppSetting("Path:Books");
-			if (string.IsNullOrWhiteSpace(Utility.FilesPath))
-				Utility.FilesPath = Path.Combine(Directory.GetCurrentDirectory(), "data-files", "books");
+			Utility.FilesPath = this.GetPath("Books", Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-files", "books"));
 			if (!Utility.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
 				Utility.FilesPath += Path.DirectorySeparatorChar.ToString();
 
@@ -48,23 +46,24 @@ namespace net.vieapps.Services.Books
 			// prepare folders
 			if (Directory.Exists(Utility.FilesPath))
 			{
-				void createFolder(string path, bool mediaFolders = true)
+				void createDirectory(string directory, bool createMediaDirectory = true)
 				{
-					if (!Directory.Exists(path))
-						Directory.CreateDirectory(path);
+					if (!Directory.Exists(directory))
+						Directory.CreateDirectory(directory);
 
-					if (mediaFolders && !Directory.Exists(Path.Combine(path, Definitions.MediaFolder)))
-						Directory.CreateDirectory(Path.Combine(path, Definitions.MediaFolder));
+					var mediaDirectory = Path.Combine(directory, Definitions.MediaDirectory);
+					if (createMediaDirectory && !Directory.Exists(mediaDirectory))
+						Directory.CreateDirectory(mediaDirectory);
 				}
 
-				createFolder(Utility.FolderOfDataFiles, false);
-				Utility.Chars.ForEach(@char => createFolder(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
-				createFolder(Utility.FolderOfStatisticFiles, false);
-				createFolder(Utility.FolderOfContributedFiles, false);
-				createFolder(Path.Combine(Utility.FolderOfContributedFiles, "users"));
-				createFolder(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
-				createFolder(Utility.FolderOfTempFiles);
-				createFolder(Utility.FolderOfTrashFiles);
+				createDirectory(Utility.FolderOfDataFiles, false);
+				Utility.Chars.ForEach(@char => createDirectory(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
+				createDirectory(Utility.FolderOfStatisticFiles, false);
+				createDirectory(Utility.FolderOfContributedFiles, false);
+				createDirectory(Path.Combine(Utility.FolderOfContributedFiles, "users"));
+				createDirectory(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
+				createDirectory(Utility.FolderOfTempFiles);
+				createDirectory(Utility.FolderOfTrashFiles);
 			}
 
 			// start the service
@@ -170,10 +169,12 @@ namespace net.vieapps.Services.Books
 				}
 		}
 
-		protected override List<Privilege> GetPrivileges(IUser user, Privileges privileges)
-			=> "book,category,statistic,profile".ToList()
-				.Select(objectName => new Privilege(this.ServiceName, objectName, null, this.GetPrivilegeRole(user)))
-				.ToList();
+		protected override Privileges Privileges
+			=> new Privileges(true)
+			{
+				ContributiveRoles = new HashSet<string> { SystemRole.Authenticated.ToString() },
+				DownloadableRoles = new HashSet<string> { SystemRole.Authenticated.ToString() }
+			};
 
 		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
@@ -202,13 +203,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> SearchBooksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(
-					requestInfo,
-					Components.Security.Action.View,
-					null,
-					(user, privileges) => this.GetPrivileges(user, privileges),
-					(role) => this.GetPrivilegeActions(role)
-				).ConfigureAwait(false))
+			if (!await this.IsViewerAsync(requestInfo.Session.User, "book", requestInfo.CorrelationID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -302,10 +297,8 @@ namespace net.vieapps.Services.Books
 			}
 
 			// check permission on create new
-			else
-			{
-
-			}
+			else if (!await this.IsContributorAsync(requestInfo.Session.User, "book", requestInfo.CorrelationID, cancellationToken).ConfigureAwait(false))
+				throw new AccessDeniedException();
 
 			// create new
 			var book = requestInfo.GetBodyJson().Copy<Book>();
@@ -461,13 +454,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> UpdateBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(
-				requestInfo,
-				Components.Security.Action.Update,
-				null,
-				(user, privileges) => this.GetPrivileges(user, privileges),
-				(role) => this.GetPrivilegeActions(role)
-			).ConfigureAwait(false))
+			if (!await this.IsEditorAsync(requestInfo.Session.User, "book", requestInfo.CorrelationID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -521,7 +508,7 @@ namespace net.vieapps.Services.Books
 				if (!string.IsNullOrWhiteSpace(cover) && cover.IsStartsWith(Definitions.MediaURI) && !cover.IsEquals(book.Cover))
 				{
 					if (!string.IsNullOrWhiteSpace(book.Cover) && book.Cover.IsStartsWith(Definitions.MediaURI))
-						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
+						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaDirectory, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
 					bookJson.Cover = book.Cover = cover;
 				}
 
@@ -556,7 +543,7 @@ namespace net.vieapps.Services.Books
 							File.Delete($"{trashFilePath}.json");
 						File.Move($"{oldFilePath}.json", $"{trashFilePath}.json");
 					}
-					UtilityService.MoveFiles(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder), Path.Combine(Utility.GetFolderPathOfBook(bookJson.Name), Definitions.MediaFolder), bookJson.GetPermanentID() + "-*.*");
+					UtilityService.MoveFiles(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaDirectory), Path.Combine(Utility.GetFolderPathOfBook(bookJson.Name), Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*");
 				}
 				else
 				{
@@ -609,7 +596,7 @@ namespace net.vieapps.Services.Books
 				{
 					var path = ".json|.epub|.mobi".IsContains(file.Extension)
 						? Path.Combine(Utility.FolderOfTrashFiles, file.Name)
-						: Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder, file.Name);
+						: Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaDirectory, file.Name);
 					if (File.Exists(path))
 						File.Delete(path);
 					File.Move(file.FullName, path);
@@ -634,13 +621,7 @@ namespace net.vieapps.Services.Books
 		async Task<JObject> DeleteBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(
-				requestInfo,
-				Components.Security.Action.Delete,
-				null,
-				(user, privileges) => this.GetPrivileges(user, privileges),
-				(role) => this.GetPrivilegeActions(role)
-			).ConfigureAwait(false))
+			if (!await this.IsModeratorAsync(requestInfo.Session.User, "book", requestInfo.CorrelationID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -658,7 +639,7 @@ namespace net.vieapps.Services.Books
 			// move files
 			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
 			if (!string.IsNullOrWhiteSpace(bookJson.GetPermanentID()))
-				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaFolder), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaFolder), bookJson.GetPermanentID() + "-*.*", true);
+				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaDirectory), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*", true);
 
 			// clear related cached & send update message
 			await Task.WhenAll(
@@ -699,15 +680,7 @@ namespace net.vieapps.Services.Books
 		async Task CrawlBookAsync(RequestInfo requestInfo)
 		{
 			// check permissions
-			if (!await this.IsAuthorizedAsync(
-				requestInfo.Session.User,
-				"book",
-				null,
-				Components.Security.Action.Create,
-				null,
-				(user, privileges) => this.GetPrivileges(user, privileges),
-				(role) => this.GetPrivilegeActions(role)
-			).ConfigureAwait(false))
+			if (!await this.IsContributorAsync(requestInfo.Session.User, "book", requestInfo.CorrelationID).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// prepare
@@ -1087,8 +1060,6 @@ namespace net.vieapps.Services.Books
 			if (!gotRights)
 				gotRights = await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false);
 			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.View, null, this.GetPrivileges, this.GetPrivilegeActions).ConfigureAwait(false);
-			if (!gotRights)
 				throw new AccessDeniedException();
 
 			// get information
@@ -1122,8 +1093,6 @@ namespace net.vieapps.Services.Books
 			var gotRights = this.IsAuthenticated(requestInfo) && requestInfo.Session.User.ID.IsEquals(id);
 			if (!gotRights)
 				gotRights = await this.IsSystemAdministratorAsync(requestInfo).ConfigureAwait(false);
-			if (!gotRights)
-				gotRights = await this.IsAuthorizedAsync(requestInfo, Components.Security.Action.Update, null, this.GetPrivileges, this.GetPrivilegeActions).ConfigureAwait(false);
 			if (!gotRights)
 				throw new AccessDeniedException();
 
@@ -1171,8 +1140,8 @@ namespace net.vieapps.Services.Books
 			{
 				File.Copy(source + filename, destination + filename, true);
 				var permanentID = Utility.GetBookAttribute(source + filename, "PermanentID");
-				(await UtilityService.GetFilesAsync(source + Definitions.MediaFolder, permanentID + "-*.*").ConfigureAwait(false))
-					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaFolder + @"\" + file.Name, true));
+				(await UtilityService.GetFilesAsync(source + Definitions.MediaDirectory, permanentID + "-*.*").ConfigureAwait(false))
+					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaDirectory + @"\" + file.Name, true));
 			}
 
 			return new JObject

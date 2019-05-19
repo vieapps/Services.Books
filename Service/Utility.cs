@@ -95,7 +95,7 @@ namespace net.vieapps.Services.Books
 			=> Utility.GetFilePathOfBook(book.Name);
 
 		public static string GetMediaFilePathOfBook(this string uri, string name, string identifier)
-			=> uri.Replace(Definitions.MediaURI, Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaFolder, identifier + "-"));
+			=> uri.Replace(Definitions.MediaURI, Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaDirectory, identifier + "-"));
 
 		public static string GetFileSize(this string filePath)
 			=> UtilityService.GetFileSize(filePath) ?? "generating...";
@@ -172,7 +172,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Working with URIs
-		public static string GetMediaFileUri(this Book book) => Utility.FilesURI + "/books/" + Definitions.MediaFolder + "/";
+		public static string GetMediaFileUri(this Book book) => Utility.FilesURI + "/books/" + Definitions.MediaDirectory + "/";
 
 		public static string GetCoverImageUri(this Book book)
 			=> string.IsNullOrWhiteSpace(book.Cover)
@@ -187,7 +187,7 @@ namespace net.vieapps.Services.Books
 		public static string NormalizeMediaFilePaths(this string content, Book book)
 			=> string.IsNullOrWhiteSpace(content)
 				? content
-				: content.Replace(Definitions.MediaURI, Path.Combine(book.GetFolderPath(), Definitions.MediaFolder, book.GetPermanentID() + "-"));
+				: content.Replace(Definitions.MediaURI, Path.Combine(book.GetFolderPath(), Definitions.MediaDirectory, book.GetPermanentID() + "-"));
 
 		public static string GetDownloadUri(this Book book)
 			=> Utility.FilesURI + "/books/download/" + book.Name.Url64Encode() + "/" + book.ID.Url64Encode() + "/" + book.Title.GetANSIUri();

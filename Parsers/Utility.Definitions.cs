@@ -4,6 +4,6 @@
 	{
 		public const string MediaURI = "book://media/";
 
-		public const string MediaFolder = "media-files";
+		public const string MediaDirectory = "media-files";
 	}
 }

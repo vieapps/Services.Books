@@ -260,7 +260,7 @@ namespace net.vieapps.Services.Books
 				(idx) => this.AddLogs($"Start to fetch the chapter [{(idx < parser.TOCs.Count && parser.Chapters[idx].IsStartsWith("http://") ? parser.TOCs[idx] + " - " + parser.Chapters[idx] : idx.ToString())}]"),
 				(idx, contents, times) => this.AddLogs($"The chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}] is fetched - Execution times: {times.GetElapsedTimes()}"),
 				(idx, ex) => this.AddLogs($"Error occurred while fetching the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}]", ex),
-				Path.Combine(folder, Definitions.MediaFolder),
+				Path.Combine(folder, Definitions.MediaDirectory),
 				(p, uri) => this.AddLogs($"Start to download images [{uri}]"),
 				(uri, path, times) => this.AddLogs($"Image is downloaded [{uri}] - Execution times: {times.GetElapsedTimes()}"),
 				(uri, ex) => this.AddLogs($"Error occurred while downloading image file [{uri}]", ex),
@@ -313,10 +313,10 @@ namespace net.vieapps.Services.Books
 			var path = book.GetFolderPath();
 			File.Copy(Path.Combine(folder, filename), Path.Combine(path, filename), true);
 			File.Delete(Path.Combine(folder, filename));
-			UtilityService.GetFiles(Path.Combine(folder, Definitions.MediaFolder), book.PermanentID + "-*.*")
+			UtilityService.GetFiles(Path.Combine(folder, Definitions.MediaDirectory), book.PermanentID + "-*.*")
 				.ForEach(file =>
 				{
-					File.Copy(file.FullName, Path.Combine(path, Definitions.MediaFolder, file.Name), true);
+					File.Copy(file.FullName, Path.Combine(path, Definitions.MediaDirectory, file.Name), true);
 					File.Delete(file.FullName);
 				});
 
