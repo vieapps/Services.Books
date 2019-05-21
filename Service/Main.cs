@@ -1274,23 +1274,18 @@ namespace net.vieapps.Services.Books
 				epub.AddLanguage(book.Language);
 				epub.AddTitle(book.Title);
 				epub.AddAuthor(book.Author);
-				epub.AddMetaItem("dc:contributor", this.CreditsInAppContributor.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
-
+				epub.AddContributor(this.CreditsInAppContributor.Replace("\n<p>", " - ").Replace("\n", "").Replace("<p>", "").Replace("</p>", "").Replace("<b>", "").Replace("</b>", "").Replace("<i>", "").Replace("</i>", ""));
 				if (!string.IsNullOrWhiteSpace(book.Translator))
 					epub.AddTranslator(book.Translator);
+				if (!string.IsNullOrWhiteSpace(book.Publisher))
+					epub.AddPublisher(book.Publisher);
 
 				if (!string.IsNullOrWhiteSpace(book.Original))
 					epub.AddMetaItem("book:Original", book.Original);
-
-				if (!string.IsNullOrWhiteSpace(book.Publisher))
-					epub.AddMetaItem("book:Publisher", book.Publisher);
-
 				if (!string.IsNullOrWhiteSpace(book.Producer))
 					epub.AddMetaItem("book:Producer", book.Producer);
-
 				if (!string.IsNullOrWhiteSpace(book.Source))
 					epub.AddMetaItem("book:Source", book.Source);
-
 				if (!string.IsNullOrWhiteSpace(book.SourceUrl))
 					epub.AddMetaItem("book:SourceUrl", book.SourceUrl);
 
