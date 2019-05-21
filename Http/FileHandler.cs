@@ -25,9 +25,7 @@ namespace net.vieapps.Services.Books
 		{
 			if (string.IsNullOrWhiteSpace(FileHandlerExtensions.FilesPath))
 			{
-				FileHandlerExtensions.FilesPath = UtilityService.GetAppSetting("Path:Books");
-				if (string.IsNullOrWhiteSpace(FileHandlerExtensions.FilesPath))
-					FileHandlerExtensions.FilesPath = Path.Combine(Global.RootPath, "data-files", "books");
+				FileHandlerExtensions.FilesPath = UtilityService.GetAppSetting("Path:Books", Path.Combine(Global.RootPath, "data-files", "books"));
 				if (!FileHandlerExtensions.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
 					FileHandlerExtensions.FilesPath += Path.DirectorySeparatorChar.ToString();
 			}
@@ -80,8 +78,8 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException();
 
 			var filePath = "no-media-file".IsEquals(name)
-				? Path.Combine(FileHandlerExtensions.FolderOfDataFiles, "no-image.png")
-				: Path.Combine(FileHandlerExtensions.FolderOfDataFiles, name.GetFirstChar(), FileHandlerExtensions.MediaFolder, $"{permanentID}-{filename}");
+				? Path.Combine(FileHandlerExtensions.DirectoryOfDataFiles, "no-image.png")
+				: Path.Combine(FileHandlerExtensions.DirectoryOfDataFiles, name.GetFirstChar(), FileHandlerExtensions.MediaDirectory, $"{permanentID}-{filename}");
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
@@ -114,11 +112,11 @@ namespace net.vieapps.Services.Books
 			if (pathSegments.Length < 4)
 				throw new InvalidRequestException();
 
-			string name = "", bookID = "";
+			string name = "", objectID = "";
 			try
 			{
 				name = pathSegments[2].Url64Decode();
-				bookID = pathSegments[3].Url64Decode();
+				objectID = pathSegments[3].Url64Decode();
 			}
 			catch (Exception ex)
 			{
@@ -126,7 +124,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// check permissions
-			if (!await context.CanDownloadAsync("Books", "Book", null, null, bookID, cancellationToken).ConfigureAwait(false))
+			if (!await context.CanDownloadAsync("Books", "Book", null, null, objectID, cancellationToken).ConfigureAwait(false))
 				throw new AccessDeniedException();
 
 			// check file
@@ -136,7 +134,7 @@ namespace net.vieapps.Services.Books
 					? ".mobi"
 					: ".json";
 
-			var fileInfo = new FileInfo(name.GetFilePathOfBook() + extension);
+			var fileInfo = new FileInfo(name.GetBookFilePath() + extension);
 			if (!fileInfo.Exists)
 				throw new FileNotFoundException(pathSegments.Last() + $" [{name}]");
 
@@ -156,7 +154,7 @@ namespace net.vieapps.Services.Books
 					{
 						{ "object-identity", "counters" },
 						{ "x-action", Components.Security.Action.Download.ToString() },
-						{ "x-object-id", bookID },
+						{ "x-object-id", objectID },
 						{ "x-user-id", context.User.Identity.Name }
 					},
 					CorrelationID = context.GetCorrelationID()
@@ -186,7 +184,7 @@ namespace net.vieapps.Services.Books
 			}, cancellationToken, this.Logger, "Http.Uploads").ConfigureAwait(false);
 
 			var fileSize = 0;
-			var filePath = Path.Combine(FileHandlerExtensions.FolderOfDataFiles, info.Get<string>("Title").GetFirstChar(), FileHandlerExtensions.MediaFolder, info.Get<string>("PermanentID") + "-");
+			var filePath = Path.Combine(FileHandlerExtensions.DirectoryOfDataFiles, info.Get<string>("Title").GetFirstChar(), FileHandlerExtensions.MediaDirectory, info.Get<string>("PermanentID") + "-");
 			var fileName = (info.Get<string>("Title") + " - " + info.Get<string>("Author") + " - " + DateTime.Now.ToIsoString()).GenerateUUID();
 			var content = new byte[0];
 			var asBase64 = context.GetParameter("x-as-base64") != null;
@@ -270,17 +268,17 @@ namespace net.vieapps.Services.Books
 	{
 		public static string FilesPath { get; set; }
 
-		public static string FolderOfDataFiles => $"{FileHandlerExtensions.FilesPath}files";
+		public static string DirectoryOfDataFiles => $"{FileHandlerExtensions.FilesPath}files";
 
 		public static string MediaURI => "book://media/";
 
-		public static string MediaFolder => "media-files";
+		public static string MediaDirectory => "media-files";
 
-		public static string GetFolderPathOfBook(this string name)
-			=> Path.Combine(FileHandlerExtensions.FolderOfDataFiles, name.GetFirstChar().ToLower());
+		public static string GetBookDirectory(this string name)
+			=> Path.Combine(FileHandlerExtensions.DirectoryOfDataFiles, name.GetFirstChar().ToLower());
 
-		public static string GetFilePathOfBook(this string name)
-			=> Path.Combine(name.GetFolderPathOfBook(), UtilityService.GetNormalizedFilename(name));
+		public static string GetBookFilePath(this string name)
+			=> Path.Combine(name.GetBookDirectory(), UtilityService.GetNormalizedFilename(name));
 
 		public static string GetFirstChar(this string @string, bool userLower = true)
 		{

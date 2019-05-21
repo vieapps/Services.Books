@@ -58,14 +58,11 @@ namespace net.vieapps.Services.Books
 		{
 			try
 			{
-				var stopwatch = new Stopwatch();
-				stopwatch.Start();
-
+				var stopwatch = Stopwatch.StartNew();
 				await Task.WhenAll(
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken) : Task.CompletedTask,
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunCrawlerOfISachAsync(onUpdate, cancellationToken) : Task.CompletedTask
 				).ConfigureAwait(false);
-
 				stopwatch.Stop();
 				onCompleted?.Invoke(stopwatch.ElapsedMilliseconds);
 			}
@@ -83,7 +80,7 @@ namespace net.vieapps.Services.Books
 		async Task RunCrawlerOfVnThuQuanAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var folder = Path.Combine(Utility.FolderOfContributedFiles, "crawlers");
+			var folder = Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers");
 			var filePath = Path.Combine(folder, "vnthuquan.net.json");
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
@@ -156,7 +153,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch { }
 
-			var folder = Path.Combine(Utility.FolderOfContributedFiles, "crawlers");
+			var folder = Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers");
 			var filePath = Path.Combine(folder, "isach.info.json");
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
@@ -249,7 +246,7 @@ namespace net.vieapps.Services.Books
 		public async Task<IBookParser> CrawlAsync(IBookParser parser, string folder = null, Func<Book, CancellationToken, Task> onUpdate = null, bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken), bool isRecrawl = false)
 		{
 			// prepare
-			folder = folder ?? Utility.FolderOfTempFiles;
+			folder = folder ?? Utility.DirectoryOfTempFiles;
 
 			// crawl
 			await parser.FetchAsync(
@@ -282,7 +279,7 @@ namespace net.vieapps.Services.Books
 		public async Task<Book> UpdateAsync(string title, string author, string folder, Func<Book, CancellationToken, Task> onCompleted = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// check
-			folder = folder ?? Utility.FolderOfTempFiles;
+			folder = folder ?? Utility.DirectoryOfTempFiles;
 			var filename = UtilityService.GetNormalizedFilename(title + " - " + author) + ".json";
 			if (!File.Exists(Path.Combine(folder, filename)))
 				return null;
@@ -310,7 +307,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// update files
-			var path = book.GetFolderPath();
+			var path = book.GetBookDirectory();
 			File.Copy(Path.Combine(folder, filename), Path.Combine(path, filename), true);
 			File.Delete(Path.Combine(folder, filename));
 			UtilityService.GetFiles(Path.Combine(folder, Definitions.MediaDirectory), book.PermanentID + "-*.*")

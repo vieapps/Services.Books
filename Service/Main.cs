@@ -56,14 +56,14 @@ namespace net.vieapps.Services.Books
 						Directory.CreateDirectory(mediaDirectory);
 				}
 
-				createDirectory(Utility.FolderOfDataFiles, false);
-				Utility.Chars.ForEach(@char => createDirectory(Path.Combine(Utility.FolderOfDataFiles, @char.ToLower())));
-				createDirectory(Utility.FolderOfStatisticFiles, false);
-				createDirectory(Utility.FolderOfContributedFiles, false);
-				createDirectory(Path.Combine(Utility.FolderOfContributedFiles, "users"));
-				createDirectory(Path.Combine(Utility.FolderOfContributedFiles, "crawlers"));
-				createDirectory(Utility.FolderOfTempFiles);
-				createDirectory(Utility.FolderOfTrashFiles);
+				createDirectory(Utility.DirectoryOfDataFiles, false);
+				Utility.Chars.ForEach(@char => createDirectory(Path.Combine(Utility.DirectoryOfDataFiles, @char.ToLower())));
+				createDirectory(Utility.DirectoryOfStatisticFiles, false);
+				createDirectory(Utility.DirectoryOfContributedFiles, false);
+				createDirectory(Path.Combine(Utility.DirectoryOfContributedFiles, "users"));
+				createDirectory(Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers"));
+				createDirectory(Utility.DirectoryOfTempFiles);
+				createDirectory(Utility.DirectoryOfTrashFiles);
 			}
 
 			// start the service
@@ -134,7 +134,7 @@ namespace net.vieapps.Services.Books
 							switch (requestInfo.GetObjectIdentity())
 							{
 								case "introductions":
-									var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.FolderOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
+									var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.DirectoryOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
 									json = introduction.StartsWith("[") ? JArray.Parse(introduction) as JToken : JObject.Parse(introduction) as JToken;
 									break;
 
@@ -372,7 +372,7 @@ namespace net.vieapps.Services.Books
 				{
 					{ "ID", book.ID },
 					{ "Chapter", chapter },
-					{ "Content", bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[chapter - 1]) : "" }
+					{ "Content", bookJson.Chapters.Count > 0 ? book.NormalizeMediaURIs(bookJson.Chapters[chapter - 1]) : "" }
 				};
 			}
 
@@ -407,7 +407,7 @@ namespace net.vieapps.Services.Books
 				{
 					json["TOCs"] = bookJson.TOCs.ToJArray(toc => new JValue(UtilityService.RemoveTags(toc)));
 					if (book.TotalChapters < 2)
-						json["Body"] = bookJson.Chapters.Count > 0 ? book.NormalizeMediaFileUris(bookJson.Chapters[0]) : "";
+						json["Body"] = bookJson.Chapters.Count > 0 ? book.NormalizeMediaURIs(bookJson.Chapters[0]) : "";
 				});
 		}
 
@@ -469,7 +469,7 @@ namespace net.vieapps.Services.Books
 			var author = book.Author;
 
 			// old files to delete
-			var oldFilePath = Utility.GetFilePathOfBook(name);
+			var oldFilePath = Utility.GetBookFilePath(name);
 			var beDeletedFiles = new List<FileInfo>
 			{
 				new FileInfo(oldFilePath + ".epub"),
@@ -508,7 +508,7 @@ namespace net.vieapps.Services.Books
 				if (!string.IsNullOrWhiteSpace(cover) && cover.IsStartsWith(Definitions.MediaURI) && !cover.IsEquals(book.Cover))
 				{
 					if (!string.IsNullOrWhiteSpace(book.Cover) && book.Cover.IsStartsWith(Definitions.MediaURI))
-						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaDirectory, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
+						beDeletedFiles.Add(new FileInfo(Path.Combine(Utility.GetBookDirectory(name), Definitions.MediaDirectory, book.Cover.Replace(Definitions.MediaURI, bookJson.GetPermanentID() + "-"))));
 					bookJson.Cover = book.Cover = cover;
 				}
 
@@ -517,7 +517,7 @@ namespace net.vieapps.Services.Books
 
 				// update JSON file
 				await UtilityService.WriteTextFileAsync(
-					Utility.GetFilePathOfBook(bookJson.Name) + ".json",
+					Utility.GetBookFilePath(bookJson.Name) + ".json",
 					bookJson.ToJson(
 						false,
 						json =>
@@ -538,12 +538,12 @@ namespace net.vieapps.Services.Books
 				{
 					if (File.Exists(oldFilePath + ".json"))
 					{
-						var trashFilePath = Path.Combine(Utility.FolderOfTrashFiles, UtilityService.GetNormalizedFilename(name));
+						var trashFilePath = Path.Combine(Utility.DirectoryOfTrashFiles, UtilityService.GetNormalizedFilename(name));
 						if (File.Exists($"{trashFilePath}.json"))
 							File.Delete($"{trashFilePath}.json");
 						File.Move($"{oldFilePath}.json", $"{trashFilePath}.json");
 					}
-					UtilityService.MoveFiles(Path.Combine(Utility.GetFolderPathOfBook(name), Definitions.MediaDirectory), Path.Combine(Utility.GetFolderPathOfBook(bookJson.Name), Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*");
+					UtilityService.MoveFiles(Path.Combine(Utility.GetBookDirectory(name), Definitions.MediaDirectory), Path.Combine(Utility.GetBookDirectory(bookJson.Name), Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*");
 				}
 				else
 				{
@@ -595,8 +595,8 @@ namespace net.vieapps.Services.Books
 				.ForEach(file =>
 				{
 					var path = ".json|.epub|.mobi".IsContains(file.Extension)
-						? Path.Combine(Utility.FolderOfTrashFiles, file.Name)
-						: Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaDirectory, file.Name);
+						? Path.Combine(Utility.DirectoryOfTrashFiles, file.Name)
+						: Path.Combine(Utility.DirectoryOfTrashFiles, Definitions.MediaDirectory, file.Name);
 					if (File.Exists(path))
 						File.Delete(path);
 					File.Move(file.FullName, path);
@@ -629,7 +629,7 @@ namespace net.vieapps.Services.Books
 			if (book == null)
 				throw new InformationNotFoundException();
 
-			var path = book.GetFolderPath();
+			var path = book.GetBookDirectory();
 			var filename = UtilityService.GetNormalizedFilename(book.Name);
 			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
 
@@ -637,9 +637,9 @@ namespace net.vieapps.Services.Books
 			await Book.DeleteAsync<Book>(book.ID, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
 
 			// move files
-			UtilityService.MoveFiles(path, Utility.FolderOfTrashFiles, filename + ".*", true);
+			UtilityService.MoveFiles(path, Utility.DirectoryOfTrashFiles, filename + ".*", true);
 			if (!string.IsNullOrWhiteSpace(bookJson.GetPermanentID()))
-				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaDirectory), Path.Combine(Utility.FolderOfTrashFiles, Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*", true);
+				UtilityService.MoveFiles(Path.Combine(path, Definitions.MediaDirectory), Path.Combine(Utility.DirectoryOfTrashFiles, Definitions.MediaDirectory), bookJson.GetPermanentID() + "-*.*", true);
 
 			// clear related cached & send update message
 			await Task.WhenAll(
@@ -713,7 +713,7 @@ namespace net.vieapps.Services.Books
 
 				await crawler.CrawlAsync(
 					parser,
-					Utility.FolderOfTempFiles,
+					Utility.DirectoryOfTempFiles,
 					async (book, token) => await this.OnBookUpdatedAsync(book, token).ConfigureAwait(false),
 					parser is Parsers.Books.ISach
 						? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
@@ -744,13 +744,13 @@ namespace net.vieapps.Services.Books
 				return;
 
 			var filename = UtilityService.GetNormalizedFilename(book.Name) + ".json";
-			var filepath = Path.Combine(Utility.FolderOfTempFiles, filename);
+			var filepath = Path.Combine(Utility.DirectoryOfTempFiles, filename);
 			if (File.Exists(filepath))
 				return;
 
 			// prepare
-			if (File.Exists(Path.Combine(book.GetFolderPath(), filename)))
-				File.Copy(Path.Combine(book.GetFolderPath(), filename), filepath, true);
+			if (File.Exists(Path.Combine(book.GetBookDirectory(), filename)))
+				File.Copy(Path.Combine(book.GetBookDirectory(), filename), filepath, true);
 			else
 				await UtilityService.WriteTextFileAsync(filepath, book.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 
@@ -803,7 +803,7 @@ namespace net.vieapps.Services.Books
 
 					await crawler.CrawlAsync(
 						parser,
-						Utility.FolderOfTempFiles,
+						Utility.DirectoryOfTempFiles,
 						async (b, token) => await this.OnBookUpdatedAsync(b, token).ConfigureAwait(false),
 						parser is Parsers.Books.ISach
 							? UtilityService.GetAppSetting("Books:Crawler-ISachParalell", "false").CastAs<bool>()
@@ -924,9 +924,9 @@ namespace net.vieapps.Services.Books
 		#region Flush & Re-compute statistics
 		void FlushStatistics()
 		{
-			Utility.Status.Save(Utility.FolderOfStatisticFiles, "status.json");
-			Utility.Categories.Save(Utility.FolderOfStatisticFiles, "categories.json");
-			Utility.Authors.Save(Utility.FolderOfStatisticFiles, "authors-{0}.json", true);
+			Utility.Status.Save(Utility.DirectoryOfStatisticFiles, "status.json");
+			Utility.Categories.Save(Utility.DirectoryOfStatisticFiles, "categories.json");
+			Utility.Authors.Save(Utility.DirectoryOfStatisticFiles, "authors-{0}.json", true);
 		}
 
 		async Task RecomputeStatistics(string correlationID)
@@ -1132,7 +1132,7 @@ namespace net.vieapps.Services.Books
 				throw new InvalidRequestException();
 
 			var source = path + @"\" + name.GetFirstChar() + @"\";
-			var destination = Utility.FolderOfDataFiles + @"\" + name.GetFirstChar() + @"\";
+			var destination = Utility.DirectoryOfDataFiles + @"\" + name.GetFirstChar() + @"\";
 			var filename = name + ".json";
 
 			// copy file
@@ -1169,9 +1169,9 @@ namespace net.vieapps.Services.Books
 		{
 			// prepare
 			var correlationID = UtilityService.NewUUID;
-			var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name));
+			var filePath = Path.Combine(book.GetBookDirectory(), UtilityService.GetNormalizedFilename(book.Name));
 			var flag = "Files-" + filePath.ToLower().GetMD5();
-			if (await Utility.Cache.ExistsAsync(flag).ConfigureAwait(false))
+			if (await Utility.Cache.ExistsAsync(flag, this.CancellationTokenSource.Token).ConfigureAwait(false))
 			{
 				if (this.IsDebugLogEnabled)
 					await this.WriteLogsAsync(correlationID, $"Other instance is currently generating e-book files, please wait for completed... [{flag}]", null, this.ServiceName, "Generators").ConfigureAwait(false);
@@ -1183,7 +1183,7 @@ namespace net.vieapps.Services.Books
 			{
 				// update flag
 				await Task.WhenAll(
-					Utility.Cache.SetAsync(flag, book.ID, 7),
+					Utility.Cache.SetAsync(flag, book.ID, 7, this.CancellationTokenSource.Token),
 					this.IsDebugLogEnabled ? this.WriteLogsAsync(correlationID, $"Start to generate e-book files [{book.Name} => {flag}]", null, this.ServiceName, "Generators") : Task.CompletedTask
 				).ConfigureAwait(false);
 
@@ -1196,7 +1196,9 @@ namespace net.vieapps.Services.Books
 				var generatingTasks = new List<Task>();
 
 				if (!status["epub"])
-					generatingTasks.Add(Task.Run(() => this.GenerateEpubFile(book, correlationID,
+					generatingTasks.Add(Task.Run(() => this.GenerateEpubFile(
+						book,
+						correlationID,
 						p => status["epub"] = true,
 						ex =>
 						{
@@ -1206,7 +1208,9 @@ namespace net.vieapps.Services.Books
 					)));
 
 				if (!status["mobi"])
-					generatingTasks.Add(Task.Run(() => this.GenerateMobiFile(book, correlationID,
+					generatingTasks.Add(Task.Run(() => this.GenerateMobiFile(
+						book,
+						correlationID,
 						p => status["mobi"] = true,
 						ex =>
 						{
@@ -1217,11 +1221,11 @@ namespace net.vieapps.Services.Books
 
 				// wait for all tasks are completed
 				while (!status["epub"] || !status["mobi"])
-					await Task.Delay(UtilityService.GetRandomNumber(234, 567)).ConfigureAwait(false);
+					await Task.Delay(UtilityService.GetRandomNumber(234, 567), this.CancellationTokenSource.Token).ConfigureAwait(false);
 
 				// update innformation
 				await Task.WhenAll(
-					Utility.Cache.RemoveAsync(flag),
+					Utility.Cache.RemoveAsync(flag, this.CancellationTokenSource.Token),
 					this.IsDebugLogEnabled ? this.WriteLogsAsync(correlationID, $"E-book files are generated [{book.Name} => {flag}]", null, this.ServiceName, "Generators") : Task.CompletedTask
 				).ConfigureAwait(false);
 			}
@@ -1236,7 +1240,7 @@ namespace net.vieapps.Services.Books
 					{ "ID", book.ID },
 					{ "Files", book.GetFiles() }
 				}
-			}).ConfigureAwait(false);
+			}, this.CancellationTokenSource.Token).ConfigureAwait(false);
 		}
 
 		public string CreditsApp => $"VIEApps NGX {this.ServiceName}";
@@ -1263,10 +1267,6 @@ namespace net.vieapps.Services.Books
 				var stopwatch = Stopwatch.StartNew();
 				if (this.IsDebugLogEnabled)
 					this.WriteLogs(correlationID, $"Start to generate EPUB file [{book.Name}]", null, this.ServiceName, "Generators");
-
-				// prepare
-				var navs = book.TOCs.Select((toc, index) => this.GetTOCItem(book, index)).ToList();
-				var pages = book.Chapters.Select(c => c.NormalizeMediaFilePaths(book)).ToList();
 
 				// meta data
 				var epub = new Components.Utility.Epub.Document();
@@ -1398,34 +1398,33 @@ namespace net.vieapps.Services.Books
 				epub.AddXhtmlData("page0.xhtml", pageTemplate.Replace("{0}", "Info").Replace("{1}", info.Replace("<p>", "\r" + "<p>")));
 
 				// chapters
-				for (var index = 0; index < pages.Count; index++)
+				var navs = book.TOCs?.Select((toc, index) => this.GetTOCItem(book, index)).ToList() ?? new List<string>();
+				book.Chapters?.Select(chapter => chapter.NormalizeMediaFilePaths(book)).ForEach((chapter, index) =>
 				{
-					var name = string.Format("page{0}.xhtml", index + 1);
-					var content = pages[index].NormalizeMediaFilePaths(book);
-
-					var start = content.PositionOf("<img");
+					var start = chapter.PositionOf("<img");
 					var end = -1;
 					while (start > -1)
 					{
-						start = content.PositionOf("src=", start + 1) + 5;
-						var @char = content[start - 1];
-						end = content.PositionOf(@char.ToString(), start + 1);
+						start = chapter.PositionOf("src=", start + 1) + 5;
+						var @char = chapter[start - 1];
+						end = chapter.PositionOf(@char.ToString(), start + 1);
 
-						var image = content.Substring(start, end - start);
-						var imageData = UtilityService.ReadBinaryFile(image.NormalizeMediaFilePaths(book));
+						var image = chapter.Substring(start, end - start);
+						var imageData = UtilityService.ReadBinaryFile(image.Replace("file://", ""));
 						if (imageData != null && imageData.Length > 0)
 							epub.AddImageData(image, imageData);
 
-						start = content.PositionOf("<img", start + 1);
+						start = chapter.PositionOf("<img", start + 1);
 					}
 
-					epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", content.Replace("<p>", "\r" + "<p>")));
+					var name = string.Format("page{0}.xhtml", index + 1);
+					epub.AddXhtmlData(name, pageTemplate.Replace("{0}", index < navs.Count ? navs[index] : book.Title).Replace("{1}", chapter.Replace("<p>", "\r" + "<p>")));
 					if (book.Chapters.Count > 1)
 						epub.AddNavPoint(index < navs.Count ? navs[index] : book.Title + " - " + (index + 1).ToString(), name, index + 1);
-				}
+				});
 
 				// save into file on disc
-				var filePath = Path.Combine(book.GetFolderPath(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
+				var filePath = Path.Combine(book.GetBookDirectory(), UtilityService.GetNormalizedFilename(book.Name) + ".epub");
 				epub.Generate(filePath);
 
 				stopwatch.Stop();
@@ -1445,7 +1444,7 @@ namespace net.vieapps.Services.Books
 		{
 			// file name & path
 			var filename = book.ID;
-			var filePath = book.GetFolderPath() + Path.DirectorySeparatorChar.ToString();
+			var filePath = book.GetBookDirectory() + Path.DirectorySeparatorChar.ToString();
 
 			// generate
 			try
@@ -1535,20 +1534,18 @@ namespace net.vieapps.Services.Books
 				var headingTags = "h1|h2|h3|h4|h5|h6".Split('|');
 				var toc = "";
 				var body = "";
-				if (book.Chapters != null && book.Chapters.Count > 0)
-					for (var index = 0; index < book.Chapters.Count; index++)
-					{
-						var chapter = book.NormalizeMediaFileUris(book.Chapters[index]);
-						foreach (var tag in headingTags)
-							chapter = chapter.Replace(StringComparison.OrdinalIgnoreCase, "<" + tag + ">", "\n<" + tag + ">").Replace(StringComparison.OrdinalIgnoreCase, "</" + tag + ">", "</" + tag + ">\n");
-						chapter = chapter.Trim().Replace("</p><p>", "</p>\n<p>").Replace("\n\n", "\n");
+				book.Chapters?.Select(chapter => chapter.NormalizeMediaFilePaths(book)).ForEach((chapter, index) =>
+				{
+					foreach (var tag in headingTags)
+						chapter = chapter.Replace(StringComparison.OrdinalIgnoreCase, "<" + tag + ">", "\n<" + tag + ">").Replace(StringComparison.OrdinalIgnoreCase, "</" + tag + ">", "</" + tag + ">\n");
+					chapter = chapter.Trim().Replace("</p><p>", "</p>\n<p>").Replace("\n\n", "\n");
 
-						toc += book.Chapters.Count > 1 ? (!toc.Equals("") ? "\n" : "") + "<p><a href=\"#chapter" + (index + 1) + "\">" + this.GetTOCItem(book, index) + "</a></p>" : "";
-						body += this.PageBreak + "\n"
-							+ "<a name=\"chapter" + (index + 1) + "\"></a>" + "\n"
-							+ chapter
-							+ "\n\n";
-					}
+					toc += book.Chapters.Count > 1 ? (!toc.Equals("") ? "\n" : "") + "<p><a href=\"#chapter" + (index + 1) + "\">" + this.GetTOCItem(book, index) + "</a></p>" : "";
+					body += this.PageBreak + "\n"
+						+ "<a name=\"chapter" + (index + 1) + "\"></a>" + "\n"
+						+ chapter
+						+ "\n\n";
+				});
 
 				if (!string.IsNullOrWhiteSpace(toc))
 					content += this.PageBreak
@@ -1629,15 +1626,14 @@ namespace net.vieapps.Services.Books
 						File.Move(filePath + filename + ".mobi", filePath + UtilityService.GetNormalizedFilename(book.Name) + ".mobi");
 
 						// delete temporary files
-						UtilityService.GetFiles(filePath, filename + ".*")
-							.ForEach(file =>
+						UtilityService.GetFiles(filePath, filename + ".*").ForEach(file =>
+						{
+							try
 							{
-								try
-								{
-									file.Delete();
-								}
-								catch { }
-							});
+								file.Delete();
+							}
+							catch { }
+						});
 
 						stopwatch.Stop();
 						if (this.IsDebugLogEnabled)
@@ -1655,18 +1651,14 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				// delete temporary files
-				UtilityService.GetFiles(filePath, filename + ".*")
-					.ForEach(file =>
+				UtilityService.GetFiles(filePath, $"{filename}.*").ForEach(file =>
+				{
+					try
 					{
-						try
-						{
-							file.Delete();
-						}
-						catch { }
-					});
-
-				// callback
+						file.Delete();
+					}
+					catch { }
+				});
 				onError?.Invoke(ex);
 			}
 		}
@@ -1775,7 +1767,7 @@ namespace net.vieapps.Services.Books
 			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-90);
-				UtilityService.GetFiles(Utility.FolderOfTrashFiles, "*.*", true)
+				UtilityService.GetFiles(Utility.DirectoryOfTrashFiles, "*.*", true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1788,7 +1780,7 @@ namespace net.vieapps.Services.Books
 					});
 
 				remainTime = DateTime.Now.AddDays(-1);
-				UtilityService.GetFiles(Utility.FolderOfTempFiles, "*.*", true)
+				UtilityService.GetFiles(Utility.DirectoryOfTempFiles, "*.*", true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1936,7 +1928,7 @@ namespace net.vieapps.Services.Books
 					{
 						{ "ID", book.ID },
 						{ "Chapter", index + 1 },
-						{ "Content", book.NormalizeMediaFileUris(content) }
+						{ "Content", book.NormalizeMediaURIs(content) }
 					}
 				}, cancellationToken)));
 			}

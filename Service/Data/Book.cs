@@ -146,7 +146,7 @@ namespace net.vieapps.Services.Books
 			{
 				if (asNormalized)
 				{
-					json["Cover"] = this.GetCoverImageUri();
+					json["Cover"] = this.GetCoverURI();
 					json["TOCs"] = new JArray();
 					json["Files"] = this.GetFiles();
 
@@ -176,8 +176,8 @@ namespace net.vieapps.Services.Books
 
 		public JObject GetFiles()
 		{
-			var filePath = Path.Combine(this.GetFolderPath(), UtilityService.GetNormalizedFilename(this.Name));
-			var downloadUri = this.GetDownloadUri();
+			var filePath = Path.Combine(this.GetBookDirectory(), UtilityService.GetNormalizedFilename(this.Name));
+			var downloadUri = this.GetDownloadURI();
 
 			return new JObject
 			{
