@@ -145,7 +145,7 @@ namespace net.vieapps.Services.Books
 					? "x-mobipocket-ebook"
 					: fileInfo.Name.IsEndsWith(".json") ? "json" : "octet-stream";
 			context.SetResponseHeaders((int)HttpStatusCode.OK, $"application/{contentType}", eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
-			await context.WriteAsync(fileInfo, null, UtilityService.GetNormalizedFilename(name) + extension, eTag, cancellationToken).ConfigureAwait(false);
+			await context.WriteAsync(fileInfo, null, UtilityService.GetNormalizedFilename(name) + extension, null, cancellationToken).ConfigureAwait(false);
 
 			await Task.WhenAll(
 				context.CallServiceAsync(new RequestInfo(context.GetSession(), "Books", "Book")

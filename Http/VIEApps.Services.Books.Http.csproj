@@ -9,10 +9,10 @@
 		<Authors>VIEApps.net</Authors>
 		<Company>VIEApps.net</Company>
 		<Product>VIEApps NGX</Product>
-		<Copyright>© 2018 VIEApps.net</Copyright>
-		<AssemblyVersion>10.2.1905.2</AssemblyVersion>
-		<FileVersion>10.2.1905.2</FileVersion>
-		<InformationalVersion>v10.2.netstandard-2+rev:2019.05.11-packages.no.deps</InformationalVersion>
+		<Copyright>© 2019 VIEApps.net</Copyright>
+		<AssemblyVersion>10.2.1906.1</AssemblyVersion>
+		<FileVersion>10.2.1906.1</FileVersion>
+		<InformationalVersion>v10.2.netstandard-2+rev:2019.05.23-latest.components</InformationalVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -20,7 +20,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="VIEApps.Services.Base.Http" Version="10.2.1905.2" />
+	  <PackageReference Include="VIEApps.Services.Base.Http" Version="10.2.1906.1" />
 	</ItemGroup>
 
 </Project>
