@@ -41,6 +41,11 @@ namespace net.vieapps.Services.Books
 				{
 					this.Logs.Add(ex.Message + " [" + ex.GetType() + "]");
 					this.Logs.Add(ex.StackTrace);
+					if (ex is RemoteServerErrorException)
+					{
+						this.Logs.Add($"- URI: {(ex as RemoteServerErrorException).ResponseUri}");
+						this.Logs.Add($"- Body: {(ex as RemoteServerErrorException).ResponseBody}");
+					}
 				}
 			}
 		}
@@ -48,7 +53,7 @@ namespace net.vieapps.Services.Books
 
 		internal void Start(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			this.MaxPages = UtilityService.GetAppSetting("Book:Crawler-MaxPages", "1").CastAs<int>();
+			this.MaxPages = UtilityService.GetAppSetting("Books:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
 			Task.Run(() => this.StartAsync(onUpdate, onCompleted, onError, cancellationToken)).ConfigureAwait(false);
@@ -60,8 +65,8 @@ namespace net.vieapps.Services.Books
 			{
 				var stopwatch = Stopwatch.StartNew();
 				await Task.WhenAll(
-					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunCrawlerOfVnThuQuanAsync(onUpdate, cancellationToken) : Task.CompletedTask,
-					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunCrawlerOfISachAsync(onUpdate, cancellationToken) : Task.CompletedTask
+					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunVnThuQuanCrawlerAsync(onUpdate, cancellationToken) : Task.CompletedTask,
+					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunISachCrawlerAsync(onUpdate, cancellationToken) : Task.CompletedTask
 				).ConfigureAwait(false);
 				stopwatch.Stop();
 				onCompleted?.Invoke(stopwatch.ElapsedMilliseconds);
@@ -77,15 +82,15 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Crawl books of vnthuquan.net
-		async Task RunCrawlerOfVnThuQuanAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
+		async Task RunVnThuQuanCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var folder = Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers");
-			var filePath = Path.Combine(folder, "vnthuquan.net.json");
+			var directory = Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers");
+			var filePath = Path.Combine(directory, "vnthuquan.net.json");
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
 			{
-				var jsonParsers = JArray.Parse(await UtilityService.ReadTextFileAsync(filePath).ConfigureAwait(false));
+				var jsonParsers = JArray.Parse(await UtilityService.ReadTextFileAsync(filePath, null, cancellationToken).ConfigureAwait(false));
 				foreach (JObject jsonParser in jsonParsers)
 					bookParsers.Add(jsonParser.Copy<Parsers.Books.VnThuQuan>());
 			}
@@ -98,8 +103,8 @@ namespace net.vieapps.Services.Books
 				{
 					this.AddLogs($"Start to crawl the bookshelf of VnThuQuan.net [{bookshelfParser.UrlPattern?.Replace("{0}", bookshelfParser.CurrentPage.ToString())}]");
 					await bookshelfParser.ParseAsync(
-						(p, times) => this.AddLogs($"The page {p.CurrentPage} of VnThuQuan.net's bookshelf is completed - Execution times: {times.GetElapsedTimes()}"),
-						(p, ex) => this.AddLogs($"Error occurred while crawling the bookshelf of VnThuQuan.net - Page number: {p.CurrentPage}", ex),
+						(parser, times) => this.AddLogs($"The page {parser.CurrentPage} of VnThuQuan.net's bookshelf is completed - Execution times: {times.GetElapsedTimes()}"),
+						(parser, ex) => this.AddLogs($"Error occurred while crawling the bookshelf of VnThuQuan.net - Page number: {parser.CurrentPage}", ex),
 						cancellationToken
 					).ConfigureAwait(false);
 					bookParsers = bookParsers.Concat(bookshelfParser.BookParsers).ToList();
@@ -117,7 +122,7 @@ namespace net.vieapps.Services.Books
 				if (!await parser.ExistsAsync(cancellationToken).ConfigureAwait(false))
 					try
 					{
-						await this.CrawlAsync(parser, folder, onUpdate, UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
+						await this.CrawlAsync(parser, directory, onUpdate, UtilityService.GetAppSetting("Books:Crawler-VnThuQuanParalell", "true").CastAs<bool>(), cancellationToken).ConfigureAwait(false);
 						success++;
 					}
 					catch (Exception ex)
@@ -144,7 +149,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Crawl books of isach.info
-		async Task RunCrawlerOfISachAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
+		async Task RunISachCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
 			try
@@ -243,10 +248,10 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Crawl a book
-		public async Task<IBookParser> CrawlAsync(IBookParser parser, string folder = null, Func<Book, CancellationToken, Task> onUpdate = null, bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken), bool isRecrawl = false)
+		public async Task<IBookParser> CrawlAsync(IBookParser parser, string directory = null, Func<Book, CancellationToken, Task> onUpdate = null, bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken), bool isRecrawl = false)
 		{
 			// prepare
-			folder = folder ?? Utility.DirectoryOfTempFiles;
+			directory = directory ?? Utility.DirectoryOfTempFiles;
 
 			// crawl
 			await parser.FetchAsync(
@@ -257,7 +262,7 @@ namespace net.vieapps.Services.Books
 				(idx) => this.AddLogs($"Start to fetch the chapter [{(idx < parser.TOCs.Count && parser.Chapters[idx].IsStartsWith("http://") ? parser.TOCs[idx] + " - " + parser.Chapters[idx] : idx.ToString())}]"),
 				(idx, contents, times) => this.AddLogs($"The chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}] is fetched - Execution times: {times.GetElapsedTimes()}"),
 				(idx, ex) => this.AddLogs($"Error occurred while fetching the chapter [{(idx < parser.TOCs.Count ? parser.TOCs[idx] : idx.ToString())}]", ex),
-				Path.Combine(folder, Definitions.MediaDirectory),
+				Path.Combine(directory, Definitions.MediaDirectory),
 				(p, uri) => this.AddLogs($"Start to download images [{uri}]"),
 				(uri, path, times) => this.AddLogs($"Image is downloaded [{uri}] - Execution times: {times.GetElapsedTimes()}"),
 				(uri, ex) => this.AddLogs($"Error occurred while downloading image file [{uri}]", ex),
@@ -267,10 +272,10 @@ namespace net.vieapps.Services.Books
 
 			// write JSON file
 			parser.TotalChapters = parser.Chapters.Count;
-			await UtilityService.WriteTextFileAsync(Path.Combine(folder, UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json"), parser.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
+			await UtilityService.WriteTextFileAsync(Path.Combine(directory, UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json"), parser.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
 
 			// update & return
-			await this.UpdateAsync(parser.Title, parser.Author, folder, onUpdate, cancellationToken).ConfigureAwait(false);
+			await this.UpdateAsync(parser.Title, parser.Author, directory, onUpdate, cancellationToken).ConfigureAwait(false);
 			return parser;
 		}
 		#endregion

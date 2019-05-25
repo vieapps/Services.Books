@@ -1,14 +1,13 @@
 ﻿#region Related components
 using System;
 using System.IO;
+using System.Net;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
-
 using Newtonsoft.Json;
-
 using net.vieapps.Components.Utility;
 #endregion
 
@@ -36,7 +35,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public string Language { get; set; } = "vi";
 		public int TotalChapters { get; set; } = 0;
 		[JsonIgnore]
-		public string ReferUrl { get; set; } = "https://vnthuquan.net/mobil/";
+		public string ReferUrl { get; set; } = "https://vnthuquan.net/truyen/";
 		public List<string> TOCs { get; set; } = new List<string>();
 		public List<string> Chapters { get; set; } = new List<string>();
 		[JsonIgnore]
@@ -47,12 +46,9 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		{
 			try
 			{
-				// prepare
-				var stopwatch = new Stopwatch();
-				stopwatch.Start();
-
 				// get HTML of the book
-				this.SourceUrl = "https://vnthuquan.net/mobil/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
+				var stopwatch = Stopwatch.StartNew();
+				this.SourceUrl = "https://vnthuquan.net/truyen/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
 				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
 
 				// parse to get details
@@ -83,12 +79,11 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public async Task<IBookParser> FetchAsync(string url = null,
 			Action<IBookParser> onStart = null, Action<IBookParser, long> onParsed = null, Action<IBookParser, long> onCompleted = null,
 			Action<int> onStartFetchChapter = null, Action<int, List<string>, long> onFetchChapterCompleted = null, Action<int, Exception> onFetchChapterError = null,
-			string folderOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
+			string directoryOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
 			bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var stopwatch = new Stopwatch();
-			stopwatch.Start();
+			var stopwatch = Stopwatch.StartNew();
 
 			// parse the book
 			onStart?.Invoke(this);
@@ -149,9 +144,9 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			// download image files
 			if (this.MediaFileUrls.Count > 0)
 			{
-				folderOfImages = folderOfImages ?? "temp";
-				onStartDownload?.Invoke(this, folderOfImages);
-				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, Path.Combine(folderOfImages, this.PermanentID + "-" + uri.GetFilename()), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
+				directoryOfImages = directoryOfImages ?? "temp";
+				onStartDownload?.Invoke(this, directoryOfImages);
+				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, Path.Combine(directoryOfImages, this.PermanentID + "-" + uri.GetFilename()), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
 			}
 
 			// normalize TOC
@@ -178,23 +173,45 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				// start
 				onStart?.Invoke(chapterIndex);
-				var stopwatch = new Stopwatch();
-				stopwatch.Start();
+				var stopwatch = Stopwatch.StartNew();
 
 				// get the HTML of the chapter
 				var contents = new List<string>();
-				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
-				using (cancellationToken.Register(() => { return; }))
+				var url = chapterUrl.Substring(0, chapterUrl.IndexOf("?") + 1) + $"&rnd=92.{UtilityService.GetRandomNumber()}";
+				var header = new Dictionary<string, string>
 				{
-					var splitter = "--!!tach_noi_dung!!--";
-					var start = html.PositionOf(splitter);
-					while (start > 0)
+					["origin"] = "https://vnthuquan.net"
+				};
+				var cookies = new List<Cookie>
+				{
+					new Cookie("AspxAutoDetectCookieSupport", "1", "/", "vnthuquan.net"),
+					new Cookie("ASP.NET_SessionId", UtilityService.GetAppSetting("Books:Crawler-VnThuQuan-SessionID", "lzr5vo45wfkqnrz3t4kv3545"), "/", "vnthuquan.net")
+				};
+				var body = chapterUrl.Substring(chapterUrl.IndexOf("?") + 1);
+				using (var response = url.IsContains("chuonghoi_moi.aspx")
+					? await UtilityService.GetWebResponseAsync("POST", url, header, cookies, body, "application/x-www-form-urlencoded", 90, UtilityService.MobileUserAgent, this.SourceUrl, null, null, cancellationToken).ConfigureAwait(false)
+					: await UtilityService.GetWebResponseAsync("GET", chapterUrl, header, cookies, null, null, 90, UtilityService.MobileUserAgent, this.SourceUrl, null, null, cancellationToken).ConfigureAwait(false)
+				)
+				{
+					using (var stream = response.GetResponseStream())
 					{
-						contents.Add(html.Substring(0, start));
-						html = html.Remove(0, start + splitter.Length);
-						start = html.PositionOf(splitter);
+						using (var reader = new StreamReader(stream, true))
+						{
+							var html = (await reader.ReadToEndAsync().WithCancellationToken(cancellationToken).ConfigureAwait(false)).HtmlDecode();
+							using (cancellationToken.Register(() => { return; }))
+							{
+								var splitter = "--!!tach_noi_dung!!--";
+								var start = html.PositionOf(splitter);
+								while (start > 0)
+								{
+									contents.Add(html.Substring(0, start));
+									html = html.Remove(0, start + splitter.Length);
+									start = html.PositionOf(splitter);
+								}
+								contents.Add(html);
+							}
+						}
 					}
-					contents.Add(html);
 				}
 
 				// parse the chapter
@@ -215,7 +232,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 							title = this.GetTOCItem(chapterIndex);
 
 						// normalize body of the chapter (image files)
-						var body = data[1].Equals("") ? "--(empty)--" : data[1].Trim();
+						body = data[1].Equals("") ? "--(empty)--" : data[1].Trim();
 						var start = body.PositionOf("<img");
 						var end = -1;
 						while (start > -1)
@@ -271,7 +288,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		void ParseBook(string html)
 		{
 			// title & meta (author & category)
-			var start = html.PositionOf("<div data-role=\"content\">");
+			var start = html.PositionOf("<aside id=\"letrai\">");
 			start = html.PositionOf("<h3>", start);
 			var end = html.PositionOf("</h3>", start + 1);
 			if (end < 0)
@@ -280,32 +297,39 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			if (start > 0 && end > 0)
 			{
 				var info = UtilityService.RemoveTag(html.Substring(start + 4, end - start - 4).Trim(), "span");
+				var data = "";
 				start = info.PositionOf("<br>");
-				this.Category = info.Substring(0, start).GetCategory();
-
-				end = info.PositionOf("<br>", start + 1);
-				this.Title = info.Substring(start + 4, end - start - 4);
-				this.Author = info.Substring(end + 4).Trim().GetAuthor();
-
-				var excludeds = "Đồng tác giả|Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Bản dịch|Hiệu đính|Biên Tập|Biên soạn|đánh máy bổ sung|Nguyên tác|Nguyên bản|Dịch theo|Dịch từ|Theo bản|Biên dịch|Tổng Hợp|Tủ Sách|Sách Xuất Bản Tại|Chủ biên|Chủ nhiệm".Split('|');
-				foreach (var excluded in excludeds)
+				if (start > 0)
 				{
-					start = this.Title.PositionOf(excluded);
-					if (start > -1)
-					{
-						end = this.Title.PositionOf("<br>", start, StringComparison.OrdinalIgnoreCase);
-						if (end < 0)
-							end = this.Title.Length - 4;
-						this.Title = this.Title.Remove(start, end - start + 4).Trim();
-					}
+					data = info.Substring(0, start);
+					this.Category = string.IsNullOrWhiteSpace(data) ? this.Category : data.GetCategory();
 
-					start = this.Author.PositionOf(excluded);
-					if (start > -1)
+					end = info.PositionOf("<br>", start + 1);
+					data = info.Substring(start + 4, end - start - 4);
+					this.Title = string.IsNullOrWhiteSpace(data) ? this.Title : data;
+					data = info.Substring(end + 4).Trim().GetAuthor();
+					this.Author = string.IsNullOrWhiteSpace(data) ? this.Author : data;
+
+					var excludeds = "Đồng tác giả|Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Bản dịch|Hiệu đính|Biên Tập|Biên soạn|đánh máy bổ sung|Nguyên tác|Nguyên bản|Dịch theo|Dịch từ|Theo bản|Biên dịch|Tổng Hợp|Tủ Sách|Sách Xuất Bản Tại|Chủ biên|Chủ nhiệm".Split('|');
+					foreach (var excluded in excludeds)
 					{
-						end = this.Author.PositionOf("<br>", start, StringComparison.OrdinalIgnoreCase);
-						if (end < 0)
-							end = this.Author.Length - 4;
-						this.Author = this.Author.Remove(start, end - start + 4).Trim();
+						start = this.Title.PositionOf(excluded);
+						if (start > -1)
+						{
+							end = this.Title.PositionOf("<br>", start, StringComparison.OrdinalIgnoreCase);
+							if (end < 0)
+								end = this.Title.Length - 4;
+							this.Title = this.Title.Remove(start, end - start + 4).Trim();
+						}
+
+						start = this.Author.PositionOf(excluded);
+						if (start > -1)
+						{
+							end = this.Author.PositionOf("<br>", start, StringComparison.OrdinalIgnoreCase);
+							if (end < 0)
+								end = this.Author.Length - 4;
+							this.Author = this.Author.Remove(start, end - start + 4).Trim();
+						}
 					}
 				}
 
@@ -315,10 +339,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				if (this.Author.PositionOf("<br>") > 0)
 				{
-					var data = this.Author.Replace(StringComparison.OrdinalIgnoreCase, "<br>", "<br>").ToArray("<br>");
-					for (var index = 0; index < data.Length - 1; index++)
-						this.Title += " " + data[index];
-					this.Author = data.Last();
+					var datas = this.Author.Replace(StringComparison.OrdinalIgnoreCase, "<br>", "<br>").ToArray("<br>");
+					for (var index = 0; index < datas.Length - 1; index++)
+						this.Title += " " + datas[index];
+					this.Author = datas.Last();
 				}
 			}
 
@@ -326,7 +350,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			var bookID = this.SourceUrl.GetIdentity();
 
 			// chapters
-			start = html.PositionOf("id=\"mucluc");
+			start = html.PositionOf("id=\"dd2");
 			start = start < 0 ? -1 : html.PositionOf("<ul", start + 1, StringComparison.OrdinalIgnoreCase);
 			start = start < 0 ? -1 : html.PositionOf(">", start + 1, StringComparison.OrdinalIgnoreCase);
 			end = start < 0 ? -1 : html.PositionOf("</ul>", start + 1, StringComparison.OrdinalIgnoreCase);
@@ -336,24 +360,17 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				start = info.PositionOf("<li");
 				while (start > -1)
 				{
+					start = info.PositionOf("('", start + 1) + 2;
+					end = info.PositionOf("')", start + 1);
+					var url = "https://vnthuquan.net/truyen/chuonghoi_moi.aspx?" + info.Substring(start, end - start);
+
 					start = info.PositionOf("<a", start + 1);
+					start = info.PositionOf(">", start + 1) + 1;
 					end = info.PositionOf("</a>", start + 1);
-					var data = info.Substring(start, end - start + 4);
+					var toc = info.Substring(start, end - start);
 
-					start = data.PositionOf("'");
-					end = start < 0 ? -1 : data.PositionOf("'", start + 1);
-					var chapterId = (end < 0 ? "" : data.Substring(start + 1, end - start - 1)).GetIdentity();
-
-					if (!chapterId.Equals(bookID) || (chapterId.Equals(bookID) && this.Chapters.Count < 1))
-					{
-						var chapterUrl = "https://vnthuquan.net/mobil/noidung.aspx?tid=" + chapterId;
-						this.Chapters.Add(chapterUrl);
-
-						start = data.PositionOf(">") + 1;
-						end = data.PositionOf("<", start + 1);
-						if (start > -1 && end > start)
-							this.TOCs.Add(data.Substring(start, end - start).GetNormalized());
-					}
+					this.Chapters.Add(url);
+					this.TOCs.Add(toc.GetNormalized());
 
 					start = info.PositionOf("</li>");
 					info = info.Remove(0, start + 5).Trim();
@@ -362,8 +379,16 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			}
 			else
 			{
-				var chapterUrl = "https://vnthuquan.net/mobil/noidung.aspx?tid=" + bookID;
-				this.Chapters.Add(chapterUrl);
+				var url = "https://vnthuquan.net/truyen/truyen.aspx?tid=" + bookID;
+				start = html.PositionOf("id=\"tieude");
+				start = start < 0 ? -1 : html.PositionOf("noidung1(", start);
+				if (start > 0)
+				{
+					start = html.PositionOf("('", start + 1) + 2;
+					end = html.PositionOf("')", start + 1);
+					url = "https://vnthuquan.net/truyen/chuonghoi_moi.aspx?" + html.Substring(start, end - start);
+				}
+				this.Chapters.Add(url);
 			}
 		}
 		#endregion
@@ -402,6 +427,22 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				title = title.Replace("<br>", ": ").Replace("<BR>", " - ").Trim();
 			}
 
+			start = title.PositionOf("<div class=\"hr");
+			if (start > 0)
+			{
+				var tit = "";
+				do
+				{
+					start = title.PositionOf("<span", start + 1);
+					start = start < 0 ? -1 : title.PositionOf(">", start + 1) + 1;
+					end = start < 0 ? -1 : title.PositionOf("</span>", start );
+					var t = start > 0 && end > 0 ? title.Substring(start, end - start).Trim() : "";
+					if (!t.Equals("") && !t.IsEquals(this.Title) && !t.IsEquals(this.Author))
+						tit += (tit != "" ? "<br>" : "") + t;
+				} while (start > 0 && end > 0);
+				title = tit.Replace("<br>", ": ").Replace("<BR>", " - ").Trim();
+			}
+
 			title = UtilityService.ClearTag(title, "img").Trim();
 			title = UtilityService.RemoveTag(title, "br").Trim();
 			title = UtilityService.RemoveTag(title, "p").Trim();
@@ -434,14 +475,25 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 			var body = UtilityService.RemoveWhitespaces(contents[2].Trim()).Replace(StringComparison.OrdinalIgnoreCase, "\r", "").Replace(StringComparison.OrdinalIgnoreCase, "\n", "").Replace(StringComparison.OrdinalIgnoreCase, "\t", "");
 
+			body = UtilityService.RemoveTagAttributes(body, "p");
+			body = UtilityService.RemoveTagAttributes(body, "div");
+
+			body = UtilityService.ClearTag(body, "script");
+			body = UtilityService.ClearComments(body);
+			body = UtilityService.RemoveMsOfficeTags(body);
+
+			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<div></div>", "</p><p>").Trim();
+			if (body.IsStartsWith("<div") && !body.IsEndsWith("</div>"))
+			{
+				body = body.Remove(0, body.IndexOf(">") + 1);
+				body = "<p>" + body + "</p>";
+			}
+
 			while (body.IsStartsWith("<div>"))
 				body = body.Substring(5).Trim();
 			while (body.IsEndsWith("</div>"))
 				body = body.Substring(0, body.Length - 6).Trim();
 
-			body = UtilityService.ClearTag(body, "script");
-			body = UtilityService.ClearComments(body);
-			body = UtilityService.RemoveMsOfficeTags(body);
 			start = body.PositionOf("<?xml");
 			while (start > -1)
 			{
@@ -450,11 +502,11 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				start = body.PositionOf("<?xml");
 			}
 
-			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<DIV class=\"truyen_text\"></DIV></STRONG>", "</STRONG>\n<p>");
-			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<DIV class=\"truyen_text\"></DIV></EM>", "</EM>\n<p>");
-
 			"strong|em|p|img".Split('|')
 				.ForEach(tag => body = body.Replace(StringComparison.OrdinalIgnoreCase, "<" + tag, "<" + tag).Replace(StringComparison.OrdinalIgnoreCase, "</" + tag + ">", "</" + tag + ">"));
+
+			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<DIV class=\"truyen_text\"></DIV></STRONG>", "</STRONG>\n<p>");
+			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<DIV class=\"truyen_text\"></DIV></EM>", "</EM>\n<p>");
 
 			var headingTags = "h1|h2|h3|h4|h5|h6".Split('|');
 			headingTags.ForEach(tag =>
@@ -536,6 +588,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				var img = body.PositionOf("src=\"https://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
 				if (img < 0)
 					img = body.PositionOf("src='https://vnthuquan.net/userfiles/images/chu%20cai/cotich", start);
+
 				if (img > -1 && end > img)
 				{
 					end = body.PositionOf("\"", img + 5);
@@ -551,6 +604,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 					body = body.Remove(start, end - start);
 					body = body.Insert(start, this.GetImageCharacter(imgChar));
 				}
+
 				start = body.PositionOf("<img", start + 1);
 			}
 
@@ -562,7 +616,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				body = body.Replace(StringComparison.OrdinalIgnoreCase, "<h1>", "<h2>").Replace(StringComparison.OrdinalIgnoreCase, "</h1>", "</h2>");
 			}
 
-			return new List<string>() { title, body };
+			return new List<string> { title, body };
 		}
 
 		string GetImageCharacter(string imgChar)
@@ -645,14 +699,14 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			output = UtilityService.RemoveTagAttributes(output, "p");
 			formattingTags.ForEach(tag => output = UtilityService.RemoveTagAttributes(output, tag));
 
-			var replacements = new List<string[]>()
+			var replacements = new List<string[]>
 			{
-				new string[] { "<p> ", "<p>" },
-				new string[] { "<p>-  ", "<p>- " },
-				new string[] { " </p>", "</p>" },
-				new string[] { "<p> ", "<p>" },
-				new string[] { "<p>-  ", "<p>- " },
-				new string[] { " </p>", "</p>" },
+				new[] { "<p> ", "<p>" },
+				new[] { "<p>-  ", "<p>- " },
+				new[] { " </p>", "</p>" },
+				new[] { "<p> ", "<p>" },
+				new[] { "<p>-  ", "<p>- " },
+				new[] { " </p>", "</p>" },
 			};
 
 			replacements.ForEach(replacement =>
@@ -845,15 +899,32 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			if (start < 0 && contents.Count > 2)
 			{
 				data = contents[2];
-				start = data.IndexOf("<img", StringComparison.OrdinalIgnoreCase);
+				start = data.PositionOf("<img");
 			}
-			if (start < 0)
-				return "";
 
-			start = data.PositionOf("src=\"", start + 1);
-			start = data.PositionOf("\"", start + 1);
-			var end = data.PositionOf("\"", start + 1);
-			return start > 0 && end > 0 ? data.Substring(start + 1, end - start - 1) : "";
+			if (start > 0)
+			{
+				start = data.PositionOf("src=\"", start + 1);
+				start = data.PositionOf("\"", start + 1);
+				var end = data.PositionOf("\"", start + 1);
+				data = start > 0 && end > 0 ? data.Substring(start + 1, end - start - 1) : "";
+			}
+			else
+				data = "";
+
+			if (data.Equals(""))
+			{
+				data = contents[0];
+				start = data.PositionOf("background:url(");
+				if (start > 0)
+				{
+					start = data.PositionOf("(", start + 1);
+					var end = data.PositionOf(")", start + 1);
+					data = start > 0 && end > 0 ? data.Substring(start + 1, end - start - 1) : "";
+				}
+			}
+
+			return data;
 		}
 
 		string GetCredits(List<string> contents)

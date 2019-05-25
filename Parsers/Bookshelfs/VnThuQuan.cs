@@ -75,7 +75,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			{
 				this.CurrentPage = 0;
 				this.TotalPages = 0;
-				this.UrlPattern = "https://vnthuquan.net/mobil/?tranghientai={0}";
+				this.UrlPattern = "https://vnthuquan.net/truyen/?tranghientai={0}";
 			}
 			else if (this.CurrentPage >= this.TotalPages)
 				this.UrlPattern = null;
@@ -93,10 +93,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			// prepare
-			var stopwatch = new Stopwatch();
-			stopwatch.Start();
-
-			// get HTML
+			var stopwatch = Stopwatch.StartNew();
 			var url = this.UrlPattern;
 			this.UrlParameters.ForEach((parameter, index) => url = url.Replace("{" + index + "}", parameter));
 
@@ -128,9 +125,9 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			int start = -1, end = -1;
 			if (this.TotalPages < 1)
 			{
-				start = html.PositionOf("id='paging'");
-				start = start < 0 ? -1 : html.PositionOf(">", start + 1) + 1;
-				end = start < 0 ? -1 : html.PositionOf("</div>", start + 1);
+				start = html.PositionOf("id=\"content\"");
+				start = start < 0 ? -1 : html.PositionOf("<a target='_self'");
+				end = start < 0 ? -1 : html.PositionOf("</h1>", start + 1);
 				if (start > 0 && end > 0)
 				{
 					var info = html.Substring(start, end - start);
@@ -153,34 +150,24 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			// books
 			this.BookParsers = new List<IBookParser>();
 
-			start = html.PositionOf("data-role=\"content\"");
+			start = html.PositionOf("id=\"content\"");
 			start = start < 0 ? -1 : html.PositionOf("<ul", start + 1);
 			start = start < 0 ? -1 : html.PositionOf(">", start + 1) + 1;
 			end = start < 0 ? -1 : html.PositionOf("</ul>", start + 1);
 			html = start > 0 && end > 0 ? html.Substring(start, end - start) : "";
 
-			start = html.PositionOf("<li");
+			start = html.PositionOf("<span");
 			while (start > -1)
 			{
-				var book = new Parsers.Books.VnThuQuan();
+				var book = new Books.VnThuQuan();
 
-				start = html.PositionOf("<a", start + 1) + 1;
-				start = html.PositionOf("href='", start + 1) + 6;
-				end = html.PositionOf("'", start + 1);
-				book.SourceUrl = "https://vnthuquan.net/mobil/" + html.Substring(start, end - start).Trim();
-
-				start = html.PositionOf("<p", start + 1);
+				start = html.PositionOf("<a", start + 1);
 				start = html.PositionOf(">", start + 1) + 1;
 				end = html.PositionOf("<", start + 1);
 				book.Category = html.Substring(start, end - start).Trim().GetCategory();
 
-				start = html.PositionOf("<h2>", start + 1) + 4;
-				end = html.PositionOf("</h2>", start + 1);
-				book.Title = html.Substring(start, end - start).GetNormalized().Replace(StringComparison.OrdinalIgnoreCase, "<br>", " ");
-				if (book.Title.Equals(book.Title.ToUpper()))
-					book.Title = book.Title.ToLower().GetNormalized();
-
-				start = html.PositionOf("Tác giả:", start + 1) + 8;
+				start = html.PositionOf("<a", start + 1);
+				start = html.PositionOf(">", start + 1) + 1;
 				end = html.PositionOf("<", start + 1);
 				var author = html.Substring(start, end - start).Trim();
 				"Đồng tác giả|Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Bản dịch|Hiệu đính|Biên Tập|Biên soạn|đánh máy bổ sung|Nguyên tác|Nguyên bản|Dịch theo|Dịch từ|Theo bản|Biên dịch|Tổng Hợp|Tủ Sách|Sách Xuất Bản Tại|Chủ biên|Chủ nhiệm".Split('|')
@@ -192,9 +179,21 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 					});
 				book.Author = author.GetAuthor();
 
-				this.BookParsers.Add(book);
+				start = html.PositionOf("<a", start + 1) + 1;
+				start = html.PositionOf("href='", start + 1) + 6;
+				end = html.PositionOf("'", start + 1);
+				book.SourceUrl = "https://vnthuquan.net/truyen/" + html.Substring(start, end - start).Trim();
 
-				start = html.PositionOf("<li", start + 1);
+				start = html.PositionOf(">", start + 1) + 1;
+				end = html.PositionOf("<", start + 1);
+				book.Title = html.Substring(start, end - start).GetNormalized().Replace(StringComparison.OrdinalIgnoreCase, "<br>", " ");
+				if (book.Title.Equals(book.Title.ToUpper()))
+					book.Title = book.Title.ToLower().GetNormalized();
+
+				if (!book.Title.IsEndsWith(" - Epub") && !book.Title.IsEndsWith(" - Pdf") && !book.Title.IsEndsWith(" - Audio"))
+					this.BookParsers.Add(book);
+
+				start = html.PositionOf("<span", start + 1);
 			}
 		}
 	}
