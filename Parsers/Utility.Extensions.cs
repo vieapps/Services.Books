@@ -1,8 +1,11 @@
 ﻿#region Related components
 using System;
+using System.IO;
+using System.Net;
 using System.Linq;
 using System.Collections.Generic;
-
+using System.Threading;
+using System.Threading.Tasks;
 using net.vieapps.Components.Utility;
 #endregion
 
@@ -255,6 +258,61 @@ namespace net.vieapps.Services.Books
 
 			parser.TOCs = tocs;
 		}
+		#endregion
+
+		#region Get HTMLs
+		internal static async Task<string> GetHtmlAsync(this string url, string method = "GET", Dictionary<string, string> header = null, List<Cookie> cookies = null, int timeout = 90, string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			using (var response = ("POST".IsEquals(method) || "PUT".IsEquals(method))
+				? await UtilityService.GetWebResponseAsync("POST", url, header, cookies, body, "application/x-www-form-urlencoded", timeout, UtilityService.MobileUserAgent, referUrl, null, null, cancellationToken).ConfigureAwait(false)
+				: await UtilityService.GetWebResponseAsync("GET", url, header, cookies, null, null, timeout, UtilityService.MobileUserAgent, referUrl, null, null, cancellationToken).ConfigureAwait(false)
+			)
+			{
+				using (var stream = response.GetResponseStream())
+				{
+					using (var reader = new StreamReader(stream, true))
+					{
+						var html = await reader.ReadToEndAsync().WithCancellationToken(cancellationToken).ConfigureAwait(false);
+						return html.HtmlDecode();
+					}
+				}
+			}
+		}
+
+		internal static Task<string> GetVnThuQuanHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+			=> url.GetHtmlAsync(
+				method,
+				new Dictionary<string, string>
+				{
+					["origin"] = "https://vnthuquan.net"
+				},
+				new List<Cookie>
+				{
+					new Cookie("AspxAutoDetectCookieSupport", "1", "/", "vnthuquan.net"),
+					new Cookie("ASP.NET_SessionId", UtilityService.GetAppSetting("Books:Crawler-VnThuQuan-SessionID", "lzr5vo45wfkqnrz3t4kv3545"), "/", "vnthuquan.net")
+				},
+				90,
+				referUrl,
+				body,
+				cancellationToken
+			);
+
+		internal static Task<string> GetISachHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+			=> url.GetHtmlAsync(
+				method,
+				new Dictionary<string, string>
+				{
+					["origin"] = "https://isach.info"
+				},
+				new List<Cookie>
+				{
+					new Cookie("PHPSESSID", UtilityService.GetAppSetting("Books:Crawler-ISach-SessionID", "gq0hsrdc4cj05basmv5poa5844"), "/", "isach.info")
+				},
+				90,
+				referUrl,
+				body,
+				cancellationToken
+			);
 		#endregion
 
 	}

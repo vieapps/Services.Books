@@ -178,45 +178,22 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				// get the HTML of the chapter
 				var contents = new List<string>();
 				var url = chapterUrl.Substring(0, chapterUrl.IndexOf("?") + 1) + $"&rnd=92.{UtilityService.GetRandomNumber()}";
-				var header = new Dictionary<string, string>
-				{
-					["origin"] = "https://vnthuquan.net"
-				};
-				var cookies = new List<Cookie>
-				{
-					new Cookie("AspxAutoDetectCookieSupport", "1", "/", "vnthuquan.net"),
-					new Cookie("ASP.NET_SessionId", UtilityService.GetAppSetting("Books:Crawler-VnThuQuan-SessionID", "lzr5vo45wfkqnrz3t4kv3545"), "/", "vnthuquan.net")
-				};
 				var body = chapterUrl.Substring(chapterUrl.IndexOf("?") + 1);
-				using (var response = url.IsContains("chuonghoi_moi.aspx")
-					? await UtilityService.GetWebResponseAsync("POST", url, header, cookies, body, "application/x-www-form-urlencoded", 90, UtilityService.MobileUserAgent, this.SourceUrl, null, null, cancellationToken).ConfigureAwait(false)
-					: await UtilityService.GetWebResponseAsync("GET", chapterUrl, header, cookies, null, null, 90, UtilityService.MobileUserAgent, this.SourceUrl, null, null, cancellationToken).ConfigureAwait(false)
-				)
-				{
-					using (var stream = response.GetResponseStream())
-					{
-						using (var reader = new StreamReader(stream, true))
-						{
-							var html = (await reader.ReadToEndAsync().WithCancellationToken(cancellationToken).ConfigureAwait(false)).HtmlDecode();
-							using (cancellationToken.Register(() => { return; }))
-							{
-								var splitter = "--!!tach_noi_dung!!--";
-								var start = html.PositionOf(splitter);
-								while (start > 0)
-								{
-									contents.Add(html.Substring(0, start));
-									html = html.Remove(0, start + splitter.Length);
-									start = html.PositionOf(splitter);
-								}
-								contents.Add(html);
-							}
-						}
-					}
-				}
+				var html = await url.GetVnThuQuanHtmlAsync(url.IsContains("chuonghoi_moi.aspx") ? "POST" : "GET", this.SourceUrl, body, cancellationToken).ConfigureAwait(false);
 
 				// parse the chapter
 				using (cancellationToken.Register(() => { return; }))
 				{
+					var splitter = "--!!tach_noi_dung!!--";
+					var start = html.PositionOf(splitter);
+					while (start > 0)
+					{
+						contents.Add(html.Substring(0, start));
+						html = html.Remove(0, start + splitter.Length);
+						start = html.PositionOf(splitter);
+					}
+					contents.Add(html);
+
 					var data = this.ParseChapter(contents);
 
 					// no information
@@ -233,7 +210,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 						// normalize body of the chapter (image files)
 						body = data[1].Equals("") ? "--(empty)--" : data[1].Trim();
-						var start = body.PositionOf("<img");
+						start = body.PositionOf("<img");
 						var end = -1;
 						while (start > -1)
 						{
