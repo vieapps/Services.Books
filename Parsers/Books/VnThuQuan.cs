@@ -48,8 +48,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				// get HTML of the book
 				var stopwatch = Stopwatch.StartNew();
-				this.SourceUrl = "https://vnthuquan.net/truyen/truyen.aspx?tid=" + (url ?? this.SourceUrl).GetIdentity();
-				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
+				var html = await this.SourceUrl.GetVnThuQuanHtmlAsync("GET", this.ReferUrl, null, cancellationToken).ConfigureAwait(false);
 
 				// parse to get details
 				await UtilityService.ExecuteTask(() => this.ParseBook(html), cancellationToken).ConfigureAwait(false);
@@ -274,11 +273,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			if (start > 0 && end > 0)
 			{
 				var info = UtilityService.RemoveTag(html.Substring(start + 4, end - start - 4).Trim(), "span");
-				var data = "";
 				start = info.PositionOf("<br>");
 				if (start > 0)
 				{
-					data = info.Substring(0, start);
+					var data = info.Substring(0, start);
 					this.Category = string.IsNullOrWhiteSpace(data) ? this.Category : data.GetCategory();
 
 					end = info.PositionOf("<br>", start + 1);

@@ -100,7 +100,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			var html = "";
 			try
 			{
-				html = await UtilityService.GetWebPageAsync(url, this.ReferUrl, UtilityService.MobileUserAgent, cancellationToken).ConfigureAwait(false);
+				html = await url.GetVnThuQuanHtmlAsync("GET", this.ReferUrl, null, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{

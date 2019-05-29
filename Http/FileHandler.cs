@@ -61,7 +61,7 @@ namespace net.vieapps.Services.Books
 			if (pathSegments.Length < 4)
 				throw new InvalidRequestException();
 
-			var name = "";
+			string name;
 			try
 			{
 				name = pathSegments[2].Url64Decode();
@@ -112,7 +112,7 @@ namespace net.vieapps.Services.Books
 			if (pathSegments.Length < 4)
 				throw new InvalidRequestException();
 
-			string name = "", objectID = "";
+			string name, objectID;
 			try
 			{
 				name = pathSegments[2].Url64Decode();
@@ -182,12 +182,12 @@ namespace net.vieapps.Services.Books
 					{ "x-object-id", objectID }
 				}
 			}, cancellationToken, this.Logger, "Http.Uploads").ConfigureAwait(false);
-
-			var fileSize = 0;
 			var filePath = Path.Combine(FileHandlerExtensions.DirectoryOfDataFiles, info.Get<string>("Title").GetFirstChar(), FileHandlerExtensions.MediaDirectory, info.Get<string>("PermanentID") + "-");
 			var fileName = (info.Get<string>("Title") + " - " + info.Get<string>("Author") + " - " + DateTime.Now.ToIsoString()).GenerateUUID();
 			var content = new byte[0];
 			var asBase64 = context.GetParameter("x-as-base64") != null;
+
+			int fileSize;
 			if (!Int32.TryParse(UtilityService.GetAppSetting("Limits:BookCover"), out var limitSize))
 				limitSize = 1024;
 
