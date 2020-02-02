@@ -50,20 +50,17 @@ namespace net.vieapps.Services.Books
 				{
 					if (!Directory.Exists(directory))
 						Directory.CreateDirectory(directory);
-
-					var mediaDirectory = Path.Combine(directory, Definitions.MediaDirectory);
-					if (createMediaDirectory && !Directory.Exists(mediaDirectory))
-						Directory.CreateDirectory(mediaDirectory);
+					if (createMediaDirectory)
+					{
+						var mediaDirectory = Path.Combine(directory, Definitions.MediaDirectory);
+						if (!Directory.Exists(mediaDirectory))
+							Directory.CreateDirectory(mediaDirectory);
+					}
 				}
-
-				createDirectory(Utility.DirectoryOfDataFiles, false);
-				Utility.Chars.ForEach(@char => createDirectory(Path.Combine(Utility.DirectoryOfDataFiles, @char.ToLower())));
-				createDirectory(Utility.DirectoryOfStatisticFiles, false);
-				createDirectory(Utility.DirectoryOfContributedFiles, false);
-				createDirectory(Path.Combine(Utility.DirectoryOfContributedFiles, "users"));
-				createDirectory(Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers"));
-				createDirectory(Utility.DirectoryOfTempFiles);
-				createDirectory(Utility.DirectoryOfTrashFiles);
+				new[] { Utility.DirectoryOfDataFiles, Utility.DirectoryOfStatisticFiles, Utility.DirectoryOfContributedFiles }.ForEach(directory => createDirectory(directory, false));
+				Utility.Chars.Select(@char => Path.Combine(Utility.DirectoryOfDataFiles, @char.ToLower()))
+					.Concat(new[] { Path.Combine(Utility.DirectoryOfContributedFiles, "users"), Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers"), Utility.DirectoryOfTempFiles, Utility.DirectoryOfTrashFiles })
+					.ForEach(directory => createDirectory(directory));
 			}
 
 			// start the service
@@ -85,9 +82,10 @@ namespace net.vieapps.Services.Books
 			base.Dispose();
 		}
 
-		~ServiceComponent() => this.Dispose();
+		~ServiceComponent()
+			=> this.Dispose();
 
-		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default(CancellationToken))
+		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default)
 		{
 			var stopwatch = Stopwatch.StartNew();
 			this.WriteLogs(requestInfo, $"Begin request ({requestInfo.Verb} {requestInfo.GetURI()})");
@@ -134,12 +132,11 @@ namespace net.vieapps.Services.Books
 							switch (requestInfo.GetObjectIdentity())
 							{
 								case "introductions":
-									var introduction = (await UtilityService.ReadTextFileAsync(Path.Combine(Utility.DirectoryOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", "");
-									json = introduction.StartsWith("[") ? JArray.Parse(introduction) as JToken : JObject.Parse(introduction) as JToken;
+									json = JToken.Parse((await UtilityService.ReadTextFileAsync(Path.Combine(Utility.DirectoryOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", ""));
 									break;
 
 								case "categories":
-									json = Utility.Categories.List.Select(info => info.Name).ToList().ToJArray();
+									json = Utility.Categories.List.Select(info => info.Name).ToJArray();
 									break;
 
 								case "book":
@@ -158,7 +155,7 @@ namespace net.vieapps.Services.Books
 					this.WriteLogs(requestInfo, $"Success response - Execution times: {stopwatch.GetElapsedTimes()}");
 					if (this.IsDebugResultsEnabled)
 						this.WriteLogs(requestInfo,
-							$"- Request: {requestInfo.ToJson().ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
+							$"- Request: {requestInfo.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
 							$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
 						);
 					return json;
@@ -411,7 +408,7 @@ namespace net.vieapps.Services.Books
 				});
 		}
 
-		async Task<JObject> UpdateCounterAsync(Book book, string action, CancellationToken cancellationToken = default(CancellationToken))
+		async Task<JObject> UpdateCounterAsync(Book book, string action, CancellationToken cancellationToken = default)
 		{
 			// get and update
 			var counter = book.Counters.FirstOrDefault(c => c.Type.IsEquals(action));
@@ -846,13 +843,13 @@ namespace net.vieapps.Services.Books
 					return this.GetStatisticsOfAuthors(requestInfo.GetQueryParameter("char"));
 
 				default:
-					await this.SendStatisticsAsync(requestInfo.Session.DeviceID).ConfigureAwait(false);
+					await this.SendStatisticsAsync(requestInfo.Session.DeviceID, cancellationToken).ConfigureAwait(false);
 					return new JObject();
 			}
 		}
 
 		#region Send statistics
-		async Task SendStatisticsAsync(string deviceID = "*")
+		async Task SendStatisticsAsync(string deviceID, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var messages = new List<BaseMessage>
@@ -869,21 +866,21 @@ namespace net.vieapps.Services.Books
 				}
 			};
 
-			Utility.Chars.ForEach((Action<string>)(@char =>
+			Utility.Chars.ForEach(@char =>
 			{
 				var data = this.GetStatisticsOfAuthors(@char);
 				data["Char"] = @char;
-				messages.Add((BaseMessage)new Services.BaseMessage
+				messages.Add(new BaseMessage
 				{
 					Type = $"{this.ServiceName}#Statistic#Authors",
 					Data = data
 				});
-			}));
+			});
 
 			// send
 			try
 			{
-				await this.SendUpdateMessagesAsync(messages, deviceID, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+				await this.SendUpdateMessagesAsync(messages, deviceID, null, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -991,7 +988,7 @@ namespace net.vieapps.Services.Books
 			this.FlushStatistics();
 
 			// send update messages
-			await this.SendStatisticsAsync().ConfigureAwait(false);
+			await this.SendStatisticsAsync("*", this.CancellationTokenSource.Token).ConfigureAwait(false);
 
 			stopwatch.Stop();
 			await this.WriteLogsAsync(UtilityService.NewUUID, $"Re-compute statistics is completed - Execution times: {stopwatch.GetElapsedTimes()}").ConfigureAwait(false);
@@ -1898,7 +1895,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Update book & statistics when related information are changed
-		async Task OnBookUpdatedAsync(Book book, CancellationToken cancellationToken = default(CancellationToken))
+		async Task OnBookUpdatedAsync(Book book, CancellationToken cancellationToken = default)
 		{
 			// clear related cached & send update message
 			await Task.WhenAll(
@@ -1955,7 +1952,7 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default(CancellationToken))
+		async Task UpdateStatiscticsAsync(Book book, bool isDeleted, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var authors = (book.Author ?? "").GetAuthorNames();
@@ -2011,7 +2008,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// send the updating message
-			await this.SendStatisticsAsync().ConfigureAwait(false);
+			await this.SendStatisticsAsync("*", cancellationToken).ConfigureAwait(false);
 		}
 		#endregion
 

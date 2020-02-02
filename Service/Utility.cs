@@ -136,7 +136,7 @@ namespace net.vieapps.Services.Books
 			return full;
 		}
 
-		public static async Task<Book> GetBookAsync(this Book book, CancellationToken cancellationToken = default(CancellationToken))
+		public static async Task<Book> GetBookAsync(this Book book, CancellationToken cancellationToken = default)
 		{
 			var key = book.GetCacheKey() + ":json";
 			var full = await Utility.Cache.GetAsync<Book>(key, cancellationToken).ConfigureAwait(false);
@@ -304,7 +304,7 @@ namespace net.vieapps.Services.Books
 				? book.PermanentID
 				: Utility.GetBookAttribute($"{book.GetFilePath()}.json", "PermanentID") ?? book.ID;
 
-		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default(CancellationToken))
+		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default)
 		{
 			if (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
 				&& await Utility.Cache.ExistsAsync($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID()).ConfigureAwait(false))
