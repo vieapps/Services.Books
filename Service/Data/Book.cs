@@ -17,11 +17,12 @@ using net.vieapps.Components.Repository;
 
 namespace net.vieapps.Services.Books
 {
-	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}, Name = {Name}")]
+	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}, Title = {Title}")]
 	[Entity(CollectionName = "Books", TableName = "T_Books_Books", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Book : Repository<Book>
 	{
-		public Book() : base() { }
+		public Book() : base()
+			=> this.ID = "";
 
 		#region Properties
 		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
@@ -42,7 +43,7 @@ namespace net.vieapps.Services.Books
 		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Producer { get; set; } = "";
 
-		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info"), FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "books/definitions/categories")]
+		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info"), FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "discovery/definitions?x-service-name=books&x-object-name=categories")]
 		public string Category { get; set; } = "";
 
 		[Property(MaxLength = 2), FormControl(Label = "{{books.info.controls.[name]}}")]
@@ -84,7 +85,7 @@ namespace net.vieapps.Services.Books
 
 		string _PermanentID = "";
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public string PermanentID
 		{
 			set => this._PermanentID = value;
@@ -96,7 +97,7 @@ namespace net.vieapps.Services.Books
 						this._PermanentID = UtilityService.GetUUID();
 					else
 					{
-						this._PermanentID = Utility.GetBookAttribute(this.GetFilePath() + ".json", "PermanentID") ?? this.ID;
+						this._PermanentID = Utility.GetBookAttribute($"{this.GetFilePath()}.json", "PermanentID") ?? this.ID;
 						Utility.Cache.Set(this);
 					}
 				}
@@ -104,22 +105,22 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public string Credits { get; set; } = "";
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public string Stylesheet { get; set; } = "";
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public List<string> TOCs { get; set; } = new List<string>();
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public List<string> Chapters { get; set; } = new List<string>();
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public HashSet<string> MediaFiles { get; set; } = new HashSet<string>();
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public string Name
 			=> string.IsNullOrWhiteSpace(this.Title)
 				? ""
@@ -127,13 +128,13 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region IBusinessEntity Properties
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public override string SystemID { get; set; }
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public override string RepositoryID { get; set; }
 
-		[JsonIgnore, BsonIgnore, Ignore]
+		[Ignore, JsonIgnore, BsonIgnore]
 		public override string EntityID { get; set; }
 		#endregion
 
@@ -197,7 +198,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		internal static async Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default(CancellationToken))
+		internal static async Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default)
 			=> string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)
 				? null
 				: await Book.GetAsync<Book>(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), null, null, cancellationToken).ConfigureAwait(false);
