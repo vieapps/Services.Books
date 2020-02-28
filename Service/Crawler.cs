@@ -51,7 +51,7 @@ namespace net.vieapps.Services.Books
 		}
 		#endregion
 
-		internal void Start(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
+		internal void Start(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default)
 		{
 			this.MaxPages = UtilityService.GetAppSetting("Books:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
@@ -59,7 +59,7 @@ namespace net.vieapps.Services.Books
 			Task.Run(() => this.StartAsync(onUpdate, onCompleted, onError, cancellationToken)).ConfigureAwait(false);
 		}
 
-		async Task StartAsync(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default(CancellationToken))
+		async Task StartAsync(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default)
 		{
 			try
 			{
@@ -82,7 +82,7 @@ namespace net.vieapps.Services.Books
 		}
 
 		#region Crawl books of vnthuquan.net
-		async Task RunVnThuQuanCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
+		async Task RunVnThuQuanCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var directory = Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers");
@@ -149,7 +149,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Crawl books of isach.info
-		async Task RunISachCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default(CancellationToken))
+		async Task RunISachCrawlerAsync(Func<Book, CancellationToken, Task> onUpdate, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			try
@@ -248,7 +248,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Crawl a book
-		public async Task<IBookParser> CrawlAsync(IBookParser parser, string directory = null, Func<Book, CancellationToken, Task> onUpdate = null, bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken), bool isRecrawl = false)
+		public async Task<IBookParser> CrawlAsync(IBookParser parser, string directory = null, Func<Book, CancellationToken, Task> onUpdate = null, bool parallelExecutions = true, CancellationToken cancellationToken = default, bool isRecrawl = false)
 		{
 			// prepare
 			directory = directory ?? Utility.DirectoryOfTempFiles;
@@ -281,7 +281,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Update book with new data (JSON, images, ...)
-		public async Task<Book> UpdateAsync(string title, string author, string folder, Func<Book, CancellationToken, Task> onCompleted = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<Book> UpdateAsync(string title, string author, string folder, Func<Book, CancellationToken, Task> onCompleted = null, CancellationToken cancellationToken = default)
 		{
 			// check
 			folder = folder ?? Utility.DirectoryOfTempFiles;

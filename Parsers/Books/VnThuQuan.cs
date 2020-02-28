@@ -42,7 +42,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public List<string> MediaFileUrls { get; set; } = new List<string>();
 		#endregion
 
-		public async Task<IBookParser> ParseAsync(string url = null, Action<IBookParser, long> onCompleted = null, Action<IBookParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<IBookParser> ParseAsync(string url = null, Action<IBookParser, long> onCompleted = null, Action<IBookParser, Exception> onError = null, CancellationToken cancellationToken = default)
 		{
 			try
 			{
@@ -79,7 +79,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			Action<IBookParser> onStart = null, Action<IBookParser, long> onParsed = null, Action<IBookParser, long> onCompleted = null,
 			Action<int> onStartFetchChapter = null, Action<int, List<string>, long> onFetchChapterCompleted = null, Action<int, Exception> onFetchChapterError = null,
 			string directoryOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
-			bool parallelExecutions = true, CancellationToken cancellationToken = default(CancellationToken))
+			bool parallelExecutions = true, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var stopwatch = Stopwatch.StartNew();
@@ -161,7 +161,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			return this;
 		}
 
-		public async Task<List<string>> FetchChapterAsync(int chapterIndex, Action<int> onStart = null, Action<int, List<string>, long> onCompleted = null, Action<int, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<List<string>> FetchChapterAsync(int chapterIndex, Action<int> onStart = null, Action<int, List<string>, long> onCompleted = null, Action<int, Exception> onError = null, CancellationToken cancellationToken = default)
 		{
 			try
 			{

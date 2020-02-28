@@ -25,7 +25,7 @@ namespace net.vieapps.Services.Books
 	{
 		public override string ServiceName => "Books";
 
-		public override void Start(string[] args = null, bool initializeRepository = true, Func<IService, Task> nextAsync = null)
+		public override void Start(string[] args = null, bool initializeRepository = true, Action<IService> next = null)
 		{
 			// initialize caching storage
 			Utility.Cache = new Cache($"VIEApps-Services-{this.ServiceName}", Components.Utility.Logger.GetLoggerFactory());
@@ -64,14 +64,13 @@ namespace net.vieapps.Services.Books
 			}
 
 			// start the service
-			base.Start(args, initializeRepository, async service =>
+			base.Start(args, initializeRepository, _ =>
 			{
 				// register timers
 				this.RegisterTimers(args);
 
 				// last action
-				if (nextAsync != null)
-					await nextAsync(service).ConfigureAwait(false);
+				next?.Invoke(this);
 			});
 		}
 

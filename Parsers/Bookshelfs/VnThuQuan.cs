@@ -90,7 +90,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			return this;
 		}
 
-		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var stopwatch = Stopwatch.StartNew();

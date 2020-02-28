@@ -261,7 +261,7 @@ namespace net.vieapps.Services.Books
 		#endregion
 
 		#region Get HTMLs
-		internal static async Task<string> GetHtmlAsync(this string url, string method = "GET", Dictionary<string, string> header = null, List<Cookie> cookies = null, int timeout = 90, string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+		internal static async Task<string> GetHtmlAsync(this string url, string method = "GET", Dictionary<string, string> header = null, List<Cookie> cookies = null, int timeout = 90, string referUrl = null, string body = null, CancellationToken cancellationToken = default)
 		{
 			using (var response = ("POST".IsEquals(method) || "PUT".IsEquals(method))
 				? await UtilityService.GetWebResponseAsync("POST", url, header, cookies, body, "application/x-www-form-urlencoded", timeout, UtilityService.MobileUserAgent, referUrl, null, null, cancellationToken).ConfigureAwait(false)
@@ -279,7 +279,7 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		internal static Task<string> GetVnThuQuanHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+		internal static Task<string> GetVnThuQuanHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default)
 			=> url.GetHtmlAsync(
 				method,
 				new Dictionary<string, string>
@@ -297,7 +297,7 @@ namespace net.vieapps.Services.Books
 				cancellationToken
 			);
 
-		internal static Task<string> GetISachHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default(CancellationToken))
+		internal static Task<string> GetISachHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default)
 			=> url.GetHtmlAsync(
 				method,
 				new Dictionary<string, string>

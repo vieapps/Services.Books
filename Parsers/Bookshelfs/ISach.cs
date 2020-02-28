@@ -154,7 +154,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			return this;
 		}
 
-		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default(CancellationToken))
+		public async Task<IBookshelfParser> ParseAsync(Action<IBookshelfParser, long> onCompleted = null, Action<IBookshelfParser, Exception> onError = null, CancellationToken cancellationToken = default)
 		{
 			// prepare
 			var stopwatch = new Stopwatch();
@@ -186,7 +186,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			return this;
 		}
 
-		async Task ParseAsync(string html, CancellationToken cancellationToken = default(CancellationToken))
+		async Task ParseAsync(string html, CancellationToken cancellationToken = default)
 		{
 			// pages
 			int start = -1, end = -1;
