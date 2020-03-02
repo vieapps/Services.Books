@@ -83,7 +83,11 @@ namespace net.vieapps.Services.Books
 
 			var fileInfo = new FileInfo(filePath);
 			if (!fileInfo.Exists)
+			{
+				if (Global.IsDebugLogEnabled)
+					await context.WriteLogsAsync(this.Logger, "Http.Books", $"The requested file is not found [{requestUri}] => {fileInfo.FullName}", new FileNotFoundException(pathSegments.Last() + " [" + name + "]"), Global.ServiceName, LogLevel.Error).ConfigureAwait(false);
 				throw new FileNotFoundException(pathSegments.Last() + " [" + name + "]");
+			}
 
 			// response
 			context.SetResponseHeaders((int)HttpStatusCode.OK, fileInfo.GetMimeType(), eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
