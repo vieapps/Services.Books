@@ -34,7 +34,7 @@ namespace net.vieapps.Services.Books
 			Utility.FilesURI = this.GetHttpURI("Files", "https://fs.vieapps.net");
 			while (Utility.FilesURI.EndsWith("/"))
 				Utility.FilesURI = Utility.FilesURI.Left(Utility.FilesURI.Length - 1);
-			Utility.FilesPath = this.GetPath("Books", Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-files", "books"));
+			Utility.FilesPath = this.GetPath("Books") ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-files", "books");
 			if (!Utility.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
 				Utility.FilesPath += Path.DirectorySeparatorChar.ToString();
 
