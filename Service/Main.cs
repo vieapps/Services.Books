@@ -43,7 +43,7 @@ namespace net.vieapps.Services.Books
 			for (char @char = 'A'; @char <= 'Z'; @char++)
 				Utility.Chars.Add(@char.ToString());
 
-			// prepare folders
+			// prepare directories
 			if (Directory.Exists(Utility.FilesPath))
 			{
 				void createDirectory(string directory, bool createMediaDirectory = true)
@@ -66,20 +66,18 @@ namespace net.vieapps.Services.Books
 			// start the service
 			base.Start(args, initializeRepository, _ =>
 			{
-				// register timers
 				this.RegisterTimers(args);
-
-				// last action
 				next?.Invoke(this);
 			});
 		}
 
-		public override void Dispose()
-		{
-			if (this.Timers.Count > 0)
-				this.FlushStatistics();
-			base.Dispose();
-		}
+		public override void Dispose(string[] args, bool available = true, bool disconnect = true, Action<IService> next = null)
+			=> base.Dispose(args, available, disconnect, _ =>
+			{
+				if (this.Timers.Count > 0)
+					this.FlushStatistics();
+				next?.Invoke(this);
+			});
 
 		~ServiceComponent()
 			=> this.Dispose();

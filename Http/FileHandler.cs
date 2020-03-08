@@ -19,8 +19,6 @@ namespace net.vieapps.Services.Books
 {
 	public class FileHandler : Services.FileHandler
 	{
-		public override ILogger Logger { get; } = Components.Utility.Logger.CreateLogger<FileHandler>();
-
 		public override async Task ProcessRequestAsync(HttpContext context, CancellationToken cancellationToken)
 		{
 			if (string.IsNullOrWhiteSpace(FileHandlerExtensions.FilesPath))

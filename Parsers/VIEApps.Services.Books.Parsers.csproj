@@ -3,10 +3,10 @@
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;netcoreapp2.1;netcoreapp3.1</TargetFrameworks>
 		<WarningLevel>3</WarningLevel>
+		<DocumentationFile>bin/$(Configuration)/$(TargetFramework)/VIEApps.Services.Books.Parsers.xml</DocumentationFile>
 		<RootNamespace>net.vieapps.Services.Books</RootNamespace>
 		<AssemblyName>VIEApps.Services.Books.Parsers</AssemblyName>
 		<AssemblyTitle>VIEApps NGX Books</AssemblyTitle>
-		<DocumentationFile>bin/$(Configuration)/$(TargetFramework)/VIEApps.Services.Books.Parsers.xml</DocumentationFile>
 		<Authors>VIEApps.net</Authors>
 		<Company>VIEApps.net</Company>
 		<Product>VIEApps NGX</Product>
@@ -21,7 +21,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VIEApps.Components.Security" Version="10.3.2003.3" />
+		<PackageReference Include="VIEApps.Components.Security" Version="10.3.2003.4" />
 	</ItemGroup>
 
 </Project>
