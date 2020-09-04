@@ -93,7 +93,7 @@ namespace net.vieapps.Services.Books
 		public List<Bookmark> Bookmarks { get; set; } = new List<Bookmark>();
 
 		[AsJson]
-		public List<RatingPoint> RatingPoints { get; set; } = new List<RatingPoint>();
+		public List<RatingInfo> RatingPoints { get; set; } = new List<RatingInfo>();
 		#endregion
 
 		#region IBusinessEntity Properties
@@ -107,7 +107,7 @@ namespace net.vieapps.Services.Books
 		public override string RepositoryID { get; set; }
 
 		[JsonIgnore, BsonIgnore, Ignore]
-		public override string EntityID { get; set; }
+		public override string RepositoryEntityID { get; set; }
 
 		[JsonIgnore, BsonIgnore, Ignore]
 		public override Privileges OriginalPrivileges { get; set; }

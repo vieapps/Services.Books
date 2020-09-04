@@ -180,14 +180,9 @@ namespace net.vieapps.Services.Books
 	// -------------------------------------
 
 	[Serializable]
-	public class StatisticInfo
+	public class StatisticInfo : Services.StatisticInfo
 	{
-		public StatisticInfo() { }
-
-		#region Properties
-		public string Name { get; set; } = "";
-
-		public int Counters { get; set; } = 0;
+		public StatisticInfo() : base() { }
 
 		[NonSerialized]
 		string _FirstChar = null;
@@ -203,20 +198,5 @@ namespace net.vieapps.Services.Books
 				return this._FirstChar;
 			}
 		}
-		#endregion
-
-		#region Methods
-		public override int GetHashCode()
-		{
-			return this.Name.ToLower().GetHashCode();
-		}
-
-		public override string ToString()
-		{
-			return this.ToJson().ToString(Formatting.None);
-		}
-		#endregion
-
 	}
-
 }

@@ -326,9 +326,5 @@ namespace net.vieapps.Services.Books
 	//  --------------------------------------------------------------------------------------------
 
 	[Serializable, Repository]
-	public abstract class Repository<T> : RepositoryBase<T> where T : class
-	{
-		[JsonIgnore, XmlIgnore, BsonIgnore, Ignore]
-		public override string ServiceName => ServiceBase.ServiceComponent.ServiceName;
-	}
+	public abstract class Repository<T> : RepositoryBase<T> where T : class { }
 }

@@ -21,66 +21,82 @@ namespace net.vieapps.Services.Books
 	[Entity(CollectionName = "Books", TableName = "T_Books_Books", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Book : Repository<Book>
 	{
-		public Book() : base()
-			=> this.ID = "";
+		public Book() : base() { }
 
-		#region Properties
-		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250, NotEmpty = true), Sortable, Searchable]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public override string Title { get; set; } = "";
 
-		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250), Searchable]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Original { get; set; } = "";
 
-		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250), Sortable(IndexName = "Info"), Searchable]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Author { get; set; } = "";
 
-		[Property(MaxLength = 250), Searchable, FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250), Searchable]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Translator { get; set; } = "";
 
-		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250)]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Publisher { get; set; } = "";
 
-		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250)]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Producer { get; set; } = "";
 
-		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info"), FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "discovery/definitions?x-service-name=books&x-object-name=categories")]
+		[Property(MaxLength = 250, NotEmpty = true), Sortable(IndexName = "Info")]
+		[FormControl(ControlType = "Select", DataType = "dropdown", Label = "{{books.info.controls.[name]}}", SelectValuesRemoteURI = "discovery/definitions?x-service-name=books&x-object-name=categories")]
 		public string Category { get; set; } = "";
 
-		[Property(MaxLength = 2), FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 2)]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Language { get; set; } = "vi";
 
-		[Property(MaxLength = 50), Sortable, FormControl(Excluded = true)]
+		[Property(MaxLength = 50), Sortable]
+		[FormControl(Excluded = true)]
 		public string Status { get; set; } = "";
 
-		[Sortable, FormControl(Excluded = true)]
+		[Sortable]
+		[FormControl(Excluded = true)]
 		public DateTime LastUpdated { get; set; } = DateTime.Now;
 
-		[AsJson, FormControl(Excluded = true)]
+		[AsJson]
+		[FormControl(Excluded = true)]
 		public List<CounterInfo> Counters { get; set; } = new List<CounterInfo>
 		{
 			new CounterInfo { Type = "View" },
 			new CounterInfo { Type = "Download" }
 		};
 
-		[AsJson, FormControl(Excluded = true)]
-		public List<RatingPoint> RatingPoints { get; set; } = new List<RatingPoint>();
+		[AsJson]
+		[FormControl(Excluded = true)]
+		public List<RatingInfo> RatingPoints { get; set; } = new List<RatingInfo>();
 
-		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250)]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Source { get; set; } = "";
 
-		[Property(MaxLength = 1000), FormControl(Excluded = true)]
+		[Property(MaxLength = 1000)]
+		[FormControl(Excluded = true)]
 		public string SourceUrl { get; set; } = "";
 
-		[Property(MaxLength = 250), FormControl(Hidden = true)]
+		[Property(MaxLength = 250)]
+		[FormControl(Hidden = true)]
 		public string Cover { get; set; } = "";
 
-		[Property(MaxLength = 250), FormControl(Label = "{{books.info.controls.[name]}}")]
+		[Property(MaxLength = 250)]
+		[FormControl(Label = "{{books.info.controls.[name]}}")]
 		public string Tags { get; set; } = "";
 
-		[Property(MaxLength = 250), FormControl(Excluded = true)]
+		[Property(MaxLength = 250)]
+		[FormControl(Excluded = true)]
 		public string Contributor { get; set; } = "";
 
-		[Sortable, FormControl(Excluded = true)]
+		[Sortable]
+		[FormControl(Excluded = true)]
 		public int TotalChapters { get; set; } = 0;
 
 		string _PermanentID = "";
@@ -125,9 +141,7 @@ namespace net.vieapps.Services.Books
 			=> string.IsNullOrWhiteSpace(this.Title)
 				? ""
 				: this.Title.Trim() + (string.IsNullOrWhiteSpace(this.Author) ? "" : " - " + this.Author.Trim());
-		#endregion
 
-		#region IBusinessEntity Properties
 		[Ignore, JsonIgnore, BsonIgnore]
 		public override string SystemID { get; set; }
 
@@ -135,10 +149,8 @@ namespace net.vieapps.Services.Books
 		public override string RepositoryID { get; set; }
 
 		[Ignore, JsonIgnore, BsonIgnore]
-		public override string EntityID { get; set; }
-		#endregion
+		public override string RepositoryEntityID { get; set; }
 
-		#region To JSON
 		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted)
 			=> this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
 
@@ -196,7 +208,6 @@ namespace net.vieapps.Services.Books
 				}
 			};
 		}
-		#endregion
 
 		internal static async Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default)
 			=> string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)

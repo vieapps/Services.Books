@@ -35,13 +35,13 @@ namespace net.vieapps.Services.Books
 			while (Utility.FilesURI.EndsWith("/"))
 				Utility.FilesURI = Utility.FilesURI.Left(Utility.FilesURI.Length - 1);
 			Utility.FilesPath = this.GetPath("Books") ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-files", "books");
-			if (!Utility.FilesPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
-				Utility.FilesPath += Path.DirectorySeparatorChar.ToString();
+			if (!Utility.FilesPath.IsEndsWith(Path.DirectorySeparatorChar))
+				Utility.FilesPath += $"{Path.DirectorySeparatorChar}";
 
 			// characters
 			Utility.Chars = new List<string> { "0" };
 			for (char @char = 'A'; @char <= 'Z'; @char++)
-				Utility.Chars.Add(@char.ToString());
+				Utility.Chars.Add($"{@char}");
 
 			// prepare directories
 			if (Directory.Exists(Utility.FilesPath))
@@ -151,10 +151,7 @@ namespace net.vieapps.Services.Books
 					stopwatch.Stop();
 					this.WriteLogs(requestInfo, $"Success response - Execution times: {stopwatch.GetElapsedTimes()}");
 					if (this.IsDebugResultsEnabled)
-						this.WriteLogs(requestInfo,
-							$"- Request: {requestInfo.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}" + "\r\n" +
-							$"- Response: {json?.ToString(this.IsDebugLogEnabled ? Formatting.Indented : Formatting.None)}"
-						);
+						this.WriteLogs(requestInfo, $"- Request: {requestInfo.ToString(this.JsonFormat)}" + "\r\n" + $"- Response: {json?.ToString(this.JsonFormat)}");
 					return json;
 				}
 				catch (Exception ex)
@@ -205,10 +202,8 @@ namespace net.vieapps.Services.Books
 
 			var query = request.Get<string>("FilterBy.Query");
 
-			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>();
-			if (filter == null)
-				filter = Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
-			else if (filter is FilterBys<Book> && (filter as FilterBys<Book>).Children.FirstOrDefault(e => (e as FilterBy<Book>).Attribute.IsEquals("Status")) == null)
+			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>() ?? Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
+			if (filter is FilterBys<Book> && (filter as FilterBys<Book>).Children.FirstOrDefault(e => (e as FilterBy<Book>).Attribute.IsEquals("Status")) == null)
 				(filter as FilterBys<Book>).Children.Add(Filters<Book>.NotEquals("Status", "Inactive"));
 
 			var sort = request.Get<ExpandoObject>("SortBy", null)?.ToSortBy<Book>();
@@ -219,15 +214,12 @@ namespace net.vieapps.Services.Books
 				? request.Get<ExpandoObject>("Pagination").GetPagination()
 				: new Tuple<long, int, int, int>(-1, 0, 20, 1);
 
+			var pageSize = pagination.Item3;
 			var pageNumber = pagination.Item4;
 
 			// check cache
-			var cacheKey = string.IsNullOrWhiteSpace(query)
-				? this.GetCacheKey(filter, sort)
-				: "";
-
-			var json = !cacheKey.Equals("")
-				? await Utility.Cache.GetAsync<string>($"{cacheKey }{pageNumber}:json").ConfigureAwait(false)
+			var json = string.IsNullOrWhiteSpace(query)
+				? await Utility.Cache.GetAsync<string>(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false)
 				: "";
 
 			if (!string.IsNullOrWhiteSpace(json))
@@ -237,19 +229,18 @@ namespace net.vieapps.Services.Books
 			var totalRecords = pagination.Item1 > -1
 				? pagination.Item1
 				: string.IsNullOrWhiteSpace(query)
-					? await Book.CountAsync(filter, $"{cacheKey}total", cancellationToken).ConfigureAwait(false)
+					? await Book.CountAsync(filter, this.GetCacheKeyOfTotalObjects(filter, sort), cancellationToken).ConfigureAwait(false)
 					: await Book.CountAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
-			var pageSize = pagination.Item3;
 
-			var totalPages = (new Tuple<long, int>(totalRecords, pageSize)).GetTotalPages();
+			var totalPages = new Tuple<long, int>(totalRecords, pageSize).GetTotalPages();
 			if (totalPages > 0 && pageNumber > totalPages)
 				pageNumber = totalPages;
 
 			// search
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
-					? await Book.FindAsync(filter, sort, pageSize, pageNumber, $"{cacheKey}{pageNumber}", cancellationToken).ConfigureAwait(false)
+					? await Book.FindAsync(filter, sort, pageSize, pageNumber, this.GetCacheKey(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false)
 					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
 				: new List<Book>();
 
@@ -265,14 +256,14 @@ namespace net.vieapps.Services.Books
 			};
 
 			// update cache
-			if (!cacheKey.Equals(""))
+			if (string.IsNullOrWhiteSpace(query))
 			{
 #if DEBUG
 				json = result.ToString(Formatting.Indented);
 #else
 				json = result.ToString(Formatting.None);
 #endif
-				await Utility.Cache.SetAsync($"{cacheKey }{pageNumber}:json", json, Utility.Cache.ExpirationTime / 2, cancellationToken).ConfigureAwait(false);
+				await Utility.Cache.SetAsync(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), json, Utility.Cache.ExpirationTime / 2, cancellationToken).ConfigureAwait(false);
 			}
 
 			// return the result
@@ -574,7 +565,7 @@ namespace net.vieapps.Services.Books
 
 			// clear related cached & send update message
 			await Task.WhenAll(
-				this.ClearRelatedCacheAsync(book, !category.IsEquals(book.Category) ? category : null, !author.IsEquals(book.Author) ? author : null),
+				this.ClearRelatedCacheAsync(book, !category.IsEquals(book.Category) ? category : null, !author.IsEquals(book.Author) ? author : null, cancellationToken),
 				this.SendUpdateMessageAsync(new UpdateMessage
 				{
 					Type = $"{this.ServiceName}#Book#Update",
@@ -637,7 +628,7 @@ namespace net.vieapps.Services.Books
 
 			// clear related cached & send update message
 			await Task.WhenAll(
-				this.ClearRelatedCacheAsync(book),
+				this.ClearRelatedCacheAsync(book, null, null, cancellationToken),
 				this.UpdateStatiscticsAsync(book, true, cancellationToken),
 				this.SendUpdateMessageAsync(new UpdateMessage
 				{
@@ -1896,7 +1887,7 @@ namespace net.vieapps.Services.Books
 		{
 			// clear related cached & send update message
 			await Task.WhenAll(
-				this.ClearRelatedCacheAsync(book),
+				this.ClearRelatedCacheAsync(book, null, null, cancellationToken),
 				this.SendUpdateMessageAsync(new UpdateMessage
 				{
 					Type = $"{this.ServiceName}#Book#Update",
@@ -1923,7 +1914,7 @@ namespace net.vieapps.Services.Books
 			}
 		}
 
-		async Task ClearRelatedCacheAsync(Book book, string category = null, string author = null)
+		async Task ClearRelatedCacheAsync(Book book, string category = null, string author = null, CancellationToken cancellationToken = default)
 		{
 			try
 			{
@@ -1932,16 +1923,25 @@ namespace net.vieapps.Services.Books
 
 				await Task.WhenAll(
 					Utility.Cache.RemoveAsync($"{book.GetCacheKey()}:json"),
-					this.ClearRelatedCacheAsync(Utility.Cache, filter, sort),
-					this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort),
-					this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort)
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(filter, sort), cancellationToken),
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"), filter), sort), cancellationToken),
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), filter), sort), cancellationToken),
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Category", book.Category), Filters<Book>.NotEquals("Status", "Inactive"), filter), sort), cancellationToken),
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), filter), sort), cancellationToken),
+					Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Author", book.Author), Filters<Book>.NotEquals("Status", "Inactive"), filter), sort), cancellationToken)
 				).ConfigureAwait(false);
 
 				if (!string.IsNullOrWhiteSpace(category))
-					await this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Category", category), filter), sort).ConfigureAwait(false);
+					await Task.WhenAll(
+						Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Category", category), filter), sort), cancellationToken),
+						Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Category", category), Filters<Book>.NotEquals("Status", "Inactive"), filter), sort), cancellationToken)
+					).ConfigureAwait(false);
 
 				if (!string.IsNullOrWhiteSpace(author))
-					await this.ClearRelatedCacheAsync(Utility.Cache, Filters<Book>.And(Filters<Book>.Equals("Author", author), filter), sort).ConfigureAwait(false);
+					await Task.WhenAll(
+						Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Author", author), filter), sort), cancellationToken),
+						Utility.Cache.RemoveAsync(this.GetRelatedCacheKeys(Filters<Book>.And(Filters<Book>.Equals("Author", author), Filters<Book>.NotEquals("Status", "Inactive"), filter), sort), cancellationToken)
+					).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{
@@ -2006,6 +2006,97 @@ namespace net.vieapps.Services.Books
 
 			// send the updating message
 			await this.SendStatisticsAsync("*", cancellationToken).ConfigureAwait(false);
+		}
+		#endregion
+
+		#region Sync
+		public override async Task<JToken> SyncAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default)
+		{
+			var stopwatch = Stopwatch.StartNew();
+			this.WriteLogs(requestInfo, $"Start sync ({requestInfo.Verb} {requestInfo.GetURI()})");
+			using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.CancellationTokenSource.Token))
+				try
+				{
+					// validate
+					var json = await base.SyncAsync(requestInfo, cancellationToken).ConfigureAwait(false);
+
+					// sync
+					switch (requestInfo.ObjectName.ToLower())
+					{
+						case "account":
+							json = await this.SyncAccountAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
+
+						case "book":
+							json = await this.SyncBookAsync(requestInfo, cts.Token).ConfigureAwait(false);
+							break;
+
+						default:
+							throw new InvalidRequestException($"The request for synchronizing is invalid ({requestInfo.Verb} {requestInfo.GetURI()})");
+					}
+
+					stopwatch.Stop();
+					this.WriteLogs(requestInfo, $"Sync success - Execution times: {stopwatch.GetElapsedTimes()}");
+					if (this.IsDebugResultsEnabled)
+						this.WriteLogs(requestInfo,
+							$"- Request: {requestInfo.ToString(this.JsonFormat)}" + "\r\n" +
+							$"- Response: {json?.ToString(this.JsonFormat)}"
+						);
+					return json;
+				}
+				catch (Exception ex)
+				{
+					throw this.GetRuntimeException(requestInfo, ex, stopwatch);
+				}
+		}
+
+		async Task<JToken> SyncAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			var data = requestInfo.GetBodyExpando();
+			var account = await Account.GetAsync<Account>(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
+			if (account == null)
+			{
+				account = Account.CreateInstance(data);
+				await Account.CreateAsync(account, cancellationToken).ConfigureAwait(false);
+			}
+			else
+			{
+				account.Fill(data);
+				await Account.UpdateAsync(account, true, cancellationToken).ConfigureAwait(false);
+			}
+			return new JObject
+			{
+				{ "Sync", "Success" },
+				{ "ID", account.ID },
+				{ "Type", account.GetTypeName(true) }
+			};
+		}
+
+		async Task<JToken> SyncBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
+		{
+			var data = requestInfo.GetBodyExpando();
+			var book = await Book.GetAsync<Book>(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
+			if (book == null)
+			{
+				book = Book.CreateInstance(data);
+				await Book.CreateAsync(book, cancellationToken).ConfigureAwait(false);
+			}
+			else
+			{
+				book.Fill(data);
+				await Book.UpdateAsync(book, true, cancellationToken).ConfigureAwait(false);
+			}
+			return new JObject
+			{
+				{ "Sync", "Success" },
+				{ "ID", book.ID },
+				{ "Type", book.GetTypeName(true) }
+			};
+		}
+
+		protected override Task SendSyncRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default)
+		{
+			return base.SendSyncRequestAsync(requestInfo, cancellationToken);
 		}
 		#endregion
 
