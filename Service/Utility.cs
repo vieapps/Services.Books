@@ -35,8 +35,6 @@ namespace net.vieapps.Services.Books
 
 		public static string DirectoryOfTrashFiles => $"{Utility.FilesPath}trash";
 
-		public static string DirectoryOfIntroductionsFiles => $"{Utility.FilesPath}introductions";
-
 		#region Avalable characters
 		public static List<string> Chars { get; internal set; }
 
@@ -138,13 +136,13 @@ namespace net.vieapps.Services.Books
 
 		public static async Task<Book> GetBookAsync(this Book book, CancellationToken cancellationToken = default)
 		{
-			var key = book.GetCacheKey() + ":json";
+			var key = $"{book.GetCacheKey()}:json";
 			var full = await Utility.Cache.GetAsync<Book>(key, cancellationToken).ConfigureAwait(false);
 			if (full == null)
 			{
 				full = book.Clone();
 				if (File.Exists(book.GetFilePath() + ".json"))
-					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync(book.GetFilePath() + ".json", null, cancellationToken).ConfigureAwait(false)));
+					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync($"{book.GetFilePath()}.json", null, cancellationToken).ConfigureAwait(false)));
 				await Utility.Cache.SetAsFragmentsAsync(key, full, 0, cancellationToken).ConfigureAwait(false);
 			}
 			return full;
@@ -159,15 +157,8 @@ namespace net.vieapps.Services.Books
 					? json.Get<string>("SourceUri")
 					: "";
 
-			book.TOCs = new List<string>();
-			var array = json["TOCs"] as JArray;
-			foreach (JValue item in array)
-				book.TOCs.Add(item.Value as string);
-
-			book.Chapters = new List<string>();
-			array = json["Chapters"] as JArray;
-			foreach (JValue item in array)
-				book.Chapters.Add(item.Value as string);
+			book.TOCs = json.Get<JArray>("TOCs")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? new List<string>();
+			book.Chapters = json.Get<JArray>("Chapters")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? new List<string>();
 		}
 		#endregion
 
@@ -316,10 +307,10 @@ namespace net.vieapps.Services.Books
 			else if (File.Exists(Path.Combine(Utility.DirectoryOfTrashFiles, filename)))
 				return true;
 
-			return (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
+			var book = !string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
 				? await Book.GetAsync<Book>($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID(), cancellationToken).ConfigureAwait(false)
-				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false)
-			) != null;
+				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false);
+			return book != null;
 		}
 	}
 

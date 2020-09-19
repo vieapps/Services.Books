@@ -151,10 +151,10 @@ namespace net.vieapps.Services.Books
 		[Ignore, JsonIgnore, BsonIgnore]
 		public override string RepositoryEntityID { get; set; }
 
-		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onPreCompleted)
-			=> this.ToJson(addTypeOfExtendedProperties, onPreCompleted, true);
+		public override JObject ToJson(bool addTypeOfExtendedProperties, Action<JObject> onCompleted)
+			=> this.ToJson(true, addTypeOfExtendedProperties, onCompleted);
 
-		public JObject ToJson(bool addTypeOfExtendedProperties = false, Action<JObject> onPreCompleted = null, bool asNormalized = true)
+		public JObject ToJson(bool asNormalized, bool addTypeOfExtendedProperties, Action<JObject> onCompleted = null)
 			=> base.ToJson(addTypeOfExtendedProperties, json =>
 			{
 				if (asNormalized)
@@ -184,7 +184,7 @@ namespace net.vieapps.Services.Books
 							json["Counters"] = this.Counters.ToJArray();
 					}
 				}
-				onPreCompleted?.Invoke(json);
+				onCompleted?.Invoke(json);
 			});
 
 		public JObject GetFiles()
@@ -209,9 +209,9 @@ namespace net.vieapps.Services.Books
 			};
 		}
 
-		internal static async Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default)
+		internal static Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default)
 			=> string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)
-				? null
-				: await Book.GetAsync<Book>(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), null, null, cancellationToken).ConfigureAwait(false);
+				? Task.FromResult<Book>(null)
+				: Book.GetAsync<Book>(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), null, null, cancellationToken);
 	}
 }

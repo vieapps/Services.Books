@@ -128,10 +128,6 @@ namespace net.vieapps.Services.Books
 						case "definitions":
 							switch (requestInfo.GetObjectIdentity())
 							{
-								case "introductions":
-									json = JToken.Parse((await UtilityService.ReadTextFileAsync(Path.Combine(Utility.DirectoryOfIntroductionsFiles, $"{requestInfo.GetQueryParameter("language") ?? "vi-VN"}.json"), null, cts.Token).ConfigureAwait(false)).Replace("\r", "").Replace("\t", ""));
-									break;
-
 								case "categories":
 									json = Utility.Categories.List.Select(info => info.Name).ToJArray();
 									break;
@@ -203,8 +199,8 @@ namespace net.vieapps.Services.Books
 			var query = request.Get<string>("FilterBy.Query");
 
 			var filter = request.Get<ExpandoObject>("FilterBy", null)?.ToFilterBy<Book>() ?? Filters<Book>.And(Filters<Book>.NotEquals("Status", "Inactive"));
-			if (filter is FilterBys<Book> && (filter as FilterBys<Book>).Children.FirstOrDefault(e => (e as FilterBy<Book>).Attribute.IsEquals("Status")) == null)
-				(filter as FilterBys<Book>).Children.Add(Filters<Book>.NotEquals("Status", "Inactive"));
+			if (filter is FilterBys<Book> filterBy && filterBy.Children.FirstOrDefault(c => c is FilterBy<Book> cfilter && cfilter.Attribute.IsEquals("Status")) == null)
+				filterBy.Children.Add(Filters<Book>.NotEquals("Status", "Inactive"));
 
 			var sort = request.Get<ExpandoObject>("SortBy", null)?.ToSortBy<Book>();
 			if (sort == null && string.IsNullOrWhiteSpace(query))
@@ -218,12 +214,9 @@ namespace net.vieapps.Services.Books
 			var pageNumber = pagination.Item4;
 
 			// check cache
-			var json = string.IsNullOrWhiteSpace(query)
-				? await Utility.Cache.GetAsync<string>(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false)
-				: "";
-
-			if (!string.IsNullOrWhiteSpace(json))
-				return JObject.Parse(json);
+			var cachedJson = string.IsNullOrWhiteSpace(query) ? await Utility.Cache.GetAsync<string>(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false) : null;
+			if (!string.IsNullOrWhiteSpace(cachedJson))
+				return JObject.Parse(cachedJson);
 
 			// prepare pagination
 			var totalRecords = pagination.Item1 > -1
@@ -252,19 +245,12 @@ namespace net.vieapps.Services.Books
 				{ "FilterBy", filter.ToClientJson(query) },
 				{ "SortBy", sort?.ToClientJson() },
 				{ "Pagination", pagination.GetPagination() },
-				{ "Objects", objects.ToJsonArray() }
+				{ "Objects", objects.Select(obj => obj.ToJson()).ToJArray() }
 			};
 
 			// update cache
 			if (string.IsNullOrWhiteSpace(query))
-			{
-#if DEBUG
-				json = result.ToString(Formatting.Indented);
-#else
-				json = result.ToString(Formatting.None);
-#endif
-				await Utility.Cache.SetAsync(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), json, Utility.Cache.ExpirationTime / 2, cancellationToken).ConfigureAwait(false);
-			}
+				await Utility.Cache.SetAsync(this.GetCacheKeyOfObjectsJson(filter, sort, pageSize, pageNumber), result.ToString(Formatting.None), Utility.Cache.ExpirationTime / 2, cancellationToken).ConfigureAwait(false);
 
 			// return the result
 			return result;
@@ -503,19 +489,15 @@ namespace net.vieapps.Services.Books
 				// update JSON file
 				await UtilityService.WriteTextFileAsync(
 					Utility.GetBookFilePath(bookJson.Name) + ".json",
-					bookJson.ToJson(
-						false,
-						json =>
-						{
-							new[] { "Counters", "RatingPoints", "LastUpdated" }.ForEach(attr => json.Remove(attr));
-							json["PermanentID"] = bookJson.GetPermanentID();
-							json["Credits"] = bookJson.Credits ?? "";
-							json["Stylesheet"] = bookJson.Stylesheet ?? "";
-							json["TOCs"] = bookJson.TOCs.ToJArray();
-							json["Chapters"] = bookJson.Chapters.ToJArray();
-						},
-						false
-					).ToString(Formatting.Indented)
+					bookJson.ToJson(false, false, json =>
+					{
+						new[] { "Counters", "RatingPoints", "LastUpdated" }.ForEach(attr => json.Remove(attr));
+						json["PermanentID"] = bookJson.GetPermanentID();
+						json["Credits"] = bookJson.Credits ?? "";
+						json["Stylesheet"] = bookJson.Stylesheet ?? "";
+						json["TOCs"] = bookJson.TOCs.ToJArray();
+						json["Chapters"] = bookJson.Chapters.ToJArray();
+					}).ToString(Formatting.Indented)
 				).ConfigureAwait(false);
 
 				// old files
