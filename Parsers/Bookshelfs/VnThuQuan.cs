@@ -106,7 +106,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			{
 				onError?.Invoke(this, ex);
 				if (onError == null)
-					throw ex;
+					throw;
 				return this;
 			}
 

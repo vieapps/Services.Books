@@ -4,16 +4,14 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
-
+using MsgPack.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
 using net.vieapps.Components.Utility;
 #endregion
 
 namespace net.vieapps.Services.Books
 {
-	[Serializable]
 	public class Statistics
 	{
 		public Statistics() { }
@@ -179,12 +177,11 @@ namespace net.vieapps.Services.Books
 
 	// -------------------------------------
 
-	[Serializable]
 	public class StatisticInfo : Services.StatisticInfo
 	{
 		public StatisticInfo() : base() { }
 
-		[NonSerialized]
+		[MessagePackIgnore]
 		string _FirstChar = null;
 
 		[JsonIgnore]

@@ -70,7 +70,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				onError?.Invoke(this, ex);
 				if (onError == null)
-					throw ex;
+					throw;
 				return this;
 			}
 		}
@@ -249,7 +249,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				onError?.Invoke(chapterIndex, ex);
 				if (onError == null)
-					throw ex;
+					throw;
 				return null;
 			}
 		}

@@ -17,7 +17,7 @@ using net.vieapps.Components.Repository;
 
 namespace net.vieapps.Services.Books
 {
-	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}, Title = {Title}")]
+	[BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}, Title = {Title}")]
 	[Entity(CollectionName = "Books", TableName = "T_Books_Books", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Book : Repository<Book>
 	{

@@ -316,6 +316,6 @@ namespace net.vieapps.Services.Books
 
 	//  --------------------------------------------------------------------------------------------
 
-	[Serializable, Repository]
+	[Repository]
 	public abstract class Repository<T> : RepositoryBase<T> where T : class { }
 }

@@ -16,7 +16,6 @@ using net.vieapps.Components.Utility;
 
 namespace net.vieapps.Services.Books
 {
-	[Serializable]
 	public enum Level
 	{
 		Normal,
@@ -26,7 +25,6 @@ namespace net.vieapps.Services.Books
 		Diamond
 	}
 
-	[Serializable]
 	public enum Reputation
 	{
 		Unknown,
@@ -35,7 +33,7 @@ namespace net.vieapps.Services.Books
 		Hight
 	}
 
-	[Serializable, BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}")]
+	[BsonIgnoreExtraElements, DebuggerDisplay("ID = {ID}")]
 	[Entity(CollectionName = "Accounts", TableName = "T_Books_Accounts", CacheClass = typeof(Utility), CacheName = "Cache", Searchable = true)]
 	public class Account : Repository<Account>
 	{
