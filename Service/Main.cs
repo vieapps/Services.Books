@@ -234,7 +234,7 @@ namespace net.vieapps.Services.Books
 			var objects = totalRecords > 0
 				? string.IsNullOrWhiteSpace(query)
 					? await Book.FindAsync(filter, sort, pageSize, pageNumber, this.GetCacheKey(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false)
-					: await Book.SearchAsync(query, filter, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
+					: await Book.SearchAsync(query, filter, null, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
 				: new List<Book>();
 
 			// build result
