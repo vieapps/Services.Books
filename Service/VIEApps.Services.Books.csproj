@@ -26,8 +26,4 @@
 		<PackageReference Include="VIEApps.Services.Base" Version="10.4.2105.1" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<ProjectReference Include="..\Parsers\VIEApps.Services.Books.Parsers.csproj" />
-	</ItemGroup>
-
 </Project>
