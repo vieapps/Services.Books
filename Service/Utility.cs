@@ -1,16 +1,10 @@
 ﻿#region Related components
-using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Serialization;
-
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using MongoDB.Bson.Serialization.Attributes;
-
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Repository;
 #endregion
