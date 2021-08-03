@@ -167,7 +167,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			var html = "";
 			try
 			{
-				html = await UtilityService.GetWebPageAsync(url, this.ReferUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+				html = await UtilityService.FetchHttpAsync(url, UtilityService.SpiderUserAgent, this.ReferUrl, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{

@@ -43,7 +43,7 @@ namespace net.vieapps.Services.Books
 					this.Logs.Add(ex.StackTrace);
 					if (ex is RemoteServerErrorException)
 					{
-						this.Logs.Add($"- URI: {(ex as RemoteServerErrorException).ResponseUri}");
+						this.Logs.Add($"- URL: {(ex as RemoteServerErrorException).ResponseURL}");
 						this.Logs.Add($"- Body: {(ex as RemoteServerErrorException).ResponseBody}");
 					}
 				}
@@ -154,7 +154,7 @@ namespace net.vieapps.Services.Books
 			// prepare
 			try
 			{
-				await UtilityService.GetWebPageAsync("https://isach.info/robots.txt", null, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+				await UtilityService.FetchHttpAsync("https://isach.info/robots.txt", UtilityService.SpiderUserAgent, null, cancellationToken).ConfigureAwait(false);
 			}
 			catch { }
 

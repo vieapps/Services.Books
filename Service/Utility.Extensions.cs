@@ -264,8 +264,8 @@ namespace net.vieapps.Services.Books
 		internal static async Task<string> GetHtmlAsync(this string url, string method = "GET", Dictionary<string, string> header = null, int timeout = 90, string referUrl = null, string body = null, CancellationToken cancellationToken = default)
 		{
 			using (var response = ("POST".IsEquals(method) || "PUT".IsEquals(method))
-				? await UtilityService.SendHttpRequestAsync("POST", url, header, body, "application/x-www-form-urlencoded", timeout, UtilityService.MobileUserAgent, referUrl, null, null, cancellationToken).ConfigureAwait(false)
-				: await UtilityService.SendHttpRequestAsync("GET", url, header, null, null, timeout, UtilityService.MobileUserAgent, referUrl, null, null, cancellationToken).ConfigureAwait(false)
+				? await UtilityService.SendHttpRequestAsync(url, "POST", header, body, "application/x-www-form-urlencoded", UtilityService.MobileUserAgent, referUrl, timeout, null, null, cancellationToken).ConfigureAwait(false)
+				: await UtilityService.SendHttpRequestAsync(url, "GET", header, null, null, UtilityService.MobileUserAgent, referUrl, timeout, null, null, cancellationToken).ConfigureAwait(false)
 			)
 			{
 				using (var stream = response.GetResponseStream())

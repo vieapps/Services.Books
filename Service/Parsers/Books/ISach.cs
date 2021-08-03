@@ -54,7 +54,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				// get HTML of the book
 				this.SourceUrl = "https://isach.info/mobile/story.php?story=" + (url ?? this.SourceUrl).GetIdentity();
-				var html = await UtilityService.GetWebPageAsync(this.SourceUrl, this.ReferUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+				var html = await UtilityService.FetchHttpAsync(this.SourceUrl, UtilityService.SpiderUserAgent, this.ReferUrl, cancellationToken).ConfigureAwait(false);
 
 				// check permission
 				if (html.PositionOf("Để đọc tác phẩm này, được yêu cầu phải đăng nhập") > 0)
@@ -249,7 +249,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get the HTML of the chapter
-				var html = await UtilityService.GetWebPageAsync(chapterUrl, this.SourceUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+				var html = await UtilityService.FetchHttpAsync(chapterUrl, UtilityService.SpiderUserAgent, this.SourceUrl, cancellationToken).ConfigureAwait(false);
 
 				// parse the chapter
 				var contents = new List<string>();
@@ -348,8 +348,8 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				if (start > -1 && end > -1)
 				{
 					var tocUrl = "https://isach.info" + html.Substring(start + 9, end - start - 9).Trim();
-					await Task.Delay(UtilityService.GetRandomNumber(123, 432)).ConfigureAwait(false);
-					html = await UtilityService.GetWebPageAsync(tocUrl, this.SourceUrl, UtilityService.SpiderUserAgent, cancellationToken).ConfigureAwait(false);
+					await Task.Delay(UtilityService.GetRandomNumber(123, 432), cancellationToken).ConfigureAwait(false);
+					html = await UtilityService.FetchHttpAsync(tocUrl, null, UtilityService.SpiderUserAgent, this.SourceUrl, 90, null, null, cancellationToken).ConfigureAwait(false);
 				}
 			}
 

@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net5.0;netstandard2.0</TargetFrameworks>
 		<WarningLevel>3</WarningLevel>
-		<NoWarn>1573,1591</NoWarn>
+		<NoWarn>1573,1591,IDE0063</NoWarn>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<RootNamespace>net.vieapps.Services.Books</RootNamespace>
 		<AssemblyName>VIEApps.Services.Books</AssemblyName>
@@ -22,8 +22,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VIEApps.Components.Utility.Epub" Version="10.4.2108.1" />
-		<PackageReference Include="VIEApps.Services.Base" Version="10.4.2108.1" />
+		<PackageReference Include="VIEApps.Components.Utility.Epub" Version="10.4.2108.3" />
+		<PackageReference Include="VIEApps.Services.Base" Version="10.4.2108.3" />
 	</ItemGroup>
 
 </Project>
