@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using MsgPack.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -99,7 +100,7 @@ namespace net.vieapps.Services.Books
 
 		string _PermanentID = "";
 
-		[Ignore, JsonIgnore, BsonIgnore]
+		[Ignore, JsonIgnore, BsonIgnore, MessagePackIgnore]
 		public string PermanentID
 		{
 			set => this._PermanentID = value;
