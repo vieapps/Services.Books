@@ -1237,7 +1237,7 @@ namespace net.vieapps.Services.Books
 
 				// meta data
 				var epub = new Components.Utility.Epub.Document();
-				epub.AddBookIdentifier(UtilityService.GetUUID(book.ID));
+				epub.AddBookIdentifier(new Guid(book.ID).ToString("D"));
 				epub.AddLanguage(book.Language);
 				epub.AddTitle(book.Title);
 				epub.AddAuthor(book.Author);
@@ -1529,7 +1529,7 @@ namespace net.vieapps.Services.Books
 						+ "<!DOCTYPE ncx PUBLIC \" -//NISO//DTD ncx 2005-1//EN\" \"http://www.daisy.org/z3986/2005/ncx-2005-1.dtd\">" + "\n"
 						+ "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\">" + "\n"
 						+ "<head>" + "\n"
-						+ "<meta name=\"dtb:uid\" content=\"urn:uuid:dbe" + UtilityService.GetUUID(book.ID) + "\"/>" + "\n"
+						+ "<meta name=\"dtb:uid\" content=\"urn:uuid:dbe" + new Guid(book.ID).ToString("D") + "\"/>" + "\n"
 						+ "</head>" + "\n"
 						+ "<docTitle><text>" + book.Title + @"</text></docTitle>" + "\n"
 						+ "<docAuthor><text>" + book.Author + @"</text></docAuthor>" + "\n"
@@ -1551,7 +1551,7 @@ namespace net.vieapps.Services.Books
 
 				// prepare OPF
 				content = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + "\n"
-					+ "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\" unique-identifier=\"" + UtilityService.GetUUID(book.ID) + "\">" + "\n"
+					+ "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\" unique-identifier=\"" + new Guid(book.ID).ToString("D") + "\">" + "\n"
 					+ "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:opf=\"http://www.idpf.org/2007/opf\">" + "\n"
 					+ "<dc:Title>" + book.Title + @"</dc:Title>" + "\n"
 					+ "<dc:Creator opf:role=\"aut\">" + book.Author + @"</dc:Creator>" + "\n"
