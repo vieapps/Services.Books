@@ -418,13 +418,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				title = tit.Replace("<br>", ": ").Replace("<BR>", " - ").Trim();
 			}
 
-			title = UtilityService.ClearTag(title, "img").Trim();
-			title = UtilityService.RemoveTag(title, "br").Trim();
-			title = UtilityService.RemoveTag(title, "p").Trim();
-			title = UtilityService.RemoveTag(title, "i").Trim();
-			title = UtilityService.RemoveTag(title, "b").Trim();
-			title = UtilityService.RemoveTag(title, "em").Trim();
-			title = UtilityService.RemoveTag(title, "strong").Trim();
+			title = title.RemoveTags(new[] { "img" }, true).RemoveTags(new[] { "br", "p", "i", "b", "em", "strong" });
 
 			while (title.IndexOf("  ") > 0)
 				title = title.Replace("  ", " ");
@@ -448,16 +442,15 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			if (title.Equals(title.ToUpper()))
 				title = title.ToLower().GetNormalized();
 
-			var body = UtilityService.RemoveWhitespaces(contents[2].Trim()).Replace(StringComparison.OrdinalIgnoreCase, "\r", "").Replace(StringComparison.OrdinalIgnoreCase, "\n", "").Replace(StringComparison.OrdinalIgnoreCase, "\t", "");
+			var body = contents[2]
+				.RemoveTagAttributes(new[] { "p", "div" })
+				.RemoveTags(new[] { "script" }, true)
+				.RemoveMsOfficeTags()
+				.RemoveWhitespaces()
+				.RemoveComments()
+				.Replace(StringComparison.OrdinalIgnoreCase, "<div></div>", "</p><p>")
+				.Trim();
 
-			body = UtilityService.RemoveTagAttributes(body, "p");
-			body = UtilityService.RemoveTagAttributes(body, "div");
-
-			body = UtilityService.ClearTag(body, "script");
-			body = UtilityService.ClearComments(body);
-			body = UtilityService.RemoveMsOfficeTags(body);
-
-			body = body.Replace(StringComparison.OrdinalIgnoreCase, "<div></div>", "</p><p>").Trim();
 			if (body.IsStartsWith("<div") && !body.IsEndsWith("</div>"))
 			{
 				body = body.Remove(0, body.IndexOf(">") + 1);
@@ -662,7 +655,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		#region Normalize body of a chapter
 		public string NormalizeChapterBody(string input)
 		{
-			var output = UtilityService.RemoveTag(input.Trim().Replace("\r", "").Replace("\n", "").Replace("\t", ""), "a");
+			var output = input.RemoveTags(new[] { "a" }, true);
 			output = output.Replace(StringComparison.OrdinalIgnoreCase, "<em", "<i").Replace(StringComparison.OrdinalIgnoreCase, "</em>", "</i>");
 			output = output.Replace(StringComparison.OrdinalIgnoreCase, "<I", "<i").Replace(StringComparison.OrdinalIgnoreCase, "</I>", "</i>");
 			output = output.Replace(StringComparison.OrdinalIgnoreCase, "<strong", "<b").Replace(StringComparison.OrdinalIgnoreCase, "</strong>", "</b>");
@@ -670,9 +663,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			output = output.Replace(StringComparison.OrdinalIgnoreCase, "<U", "<u").Replace(StringComparison.OrdinalIgnoreCase, "</u>", "</u>");
 
 			var formattingTags = "b|i|u".Split('|');
-			output = UtilityService.RemoveMsOfficeTags(output);
-			output = UtilityService.RemoveTagAttributes(output, "p");
-			formattingTags.ForEach(tag => output = UtilityService.RemoveTagAttributes(output, tag));
+			output = output.RemoveMsOfficeTags().RemoveTagAttributes(formattingTags.Concat(new[] { "p" }));
 
 			var replacements = new List<string[]>
 			{
@@ -855,14 +846,10 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 		#region Get other meta information of the book (translator, original title, cover image, credits, TOC item, ...)
 		string GetTranslator(List<string> contents)
-		{
-			return this.GetValueOfTitle(contents, "Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Biên dịch".Split('|')).ToLower().GetNormalized();
-		}
+			=> this.GetValueOfTitle(contents, "Dịch giả|Người dịch|Dịch viện|Chuyển ngữ|Dịch ra|Anh dịch|Dịch thuật|Biên dịch".Split('|')).ToLower().GetNormalized();
 
 		string GetOriginal(List<string> contents)
-		{
-			return this.GetValueOfTitle(contents, "Nguyên tác|Dịch theo|Dịch từ|Theo bản".Split('|')).ToLower().GetNormalized();
-		}
+			=> this.GetValueOfTitle(contents, "Nguyên tác|Dịch theo|Dịch từ|Theo bản".Split('|')).ToLower().GetNormalized();
 
 		string GetCoverImage(List<string> contents)
 		{
@@ -927,14 +914,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 		string GetTOCItem(int chapterIndex)
 		{
-			var toc = this.TOCs != null && chapterIndex < this.TOCs.Count
-				? this.TOCs[chapterIndex]
-				: "";
-			if (!string.IsNullOrWhiteSpace(toc))
-			{
-				toc = UtilityService.RemoveTag(toc, "a");
-				toc = UtilityService.RemoveTag(toc, "p");
-			}
+			var toc = this.TOCs != null && chapterIndex < this.TOCs.Count ? this.TOCs[chapterIndex].RemoveTags(new[] { "a", "p "}) : "";
 			return string.IsNullOrWhiteSpace(toc)
 				? (chapterIndex + 1).ToString()
 				: toc.GetNormalized().Replace("{0}", (chapterIndex + 1).ToString());
