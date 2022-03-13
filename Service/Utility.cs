@@ -99,7 +99,7 @@ namespace net.vieapps.Services.Books
 			if (!File.Exists(filePath) || string.IsNullOrWhiteSpace(attribute))
 				return "";
 
-			var json = UtilityService.ReadTextFile(filePath, 20).Aggregate((i, j) => i + "\n" + j).ToString();
+			var json = new FileInfo(filePath).ReadAsText(0, 20).Item1.Aggregate((i, j) => i + "\n" + j).ToString();
 			var indicator = "\"" + attribute + "\":";
 			var start = json.PositionOf(indicator);
 			start = start < 0
@@ -122,7 +122,7 @@ namespace net.vieapps.Services.Books
 			{
 				full = book.Clone();
 				if (File.Exists(book.GetFilePath() + ".json"))
-					full.Copy(JObject.Parse(UtilityService.ReadTextFile(book.GetFilePath() + ".json")));
+					full.Copy(JObject.Parse(new FileInfo(book.GetFilePath() + ".json").ReadAsText()));
 				Utility.Cache.SetAsFragments(key, full);
 			}
 			return full;
@@ -136,7 +136,7 @@ namespace net.vieapps.Services.Books
 			{
 				full = book.Clone();
 				if (File.Exists(book.GetFilePath() + ".json"))
-					full.Copy(JObject.Parse(await UtilityService.ReadTextFileAsync($"{book.GetFilePath()}.json", null, cancellationToken).ConfigureAwait(false)));
+					full.Copy(JObject.Parse(await new FileInfo($"{book.GetFilePath()}.json").ReadAsTextAsync(cancellationToken).ConfigureAwait(false)));
 				await Utility.Cache.SetAsFragmentsAsync(key, full, 0, cancellationToken).ConfigureAwait(false);
 			}
 			return full;
@@ -292,7 +292,7 @@ namespace net.vieapps.Services.Books
 		public static async Task<bool> ExistsAsync(this IBookParser parser, CancellationToken cancellationToken = default)
 		{
 			if (!string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
-				&& await Utility.Cache.ExistsAsync($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID()).ConfigureAwait(false))
+				&& await Utility.Cache.ExistsAsync($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID(), cancellationToken).ConfigureAwait(false))
 				return true;
 
 			var filename = UtilityService.GetNormalizedFilename($"{parser.Title} - {parser.Author}") + ".json";

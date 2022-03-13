@@ -142,7 +142,7 @@ namespace net.vieapps.Services.Books
 			if (seperatedByFirstChar)
 				Utility.Chars
 					.Where(@char => File.Exists(string.Format(filePath, @char)))
-					.ForEach(@char => UtilityService.ReadTextFile(string.Format(filePath, @char))
+					.ForEach(@char => new FileInfo(string.Format(filePath, @char)).ReadAsText()
 						.FromJson<List<StatisticInfo>>()
 						.Where(item => item != null)
 						.ForEach(item => this.List.Add(new StatisticInfo
@@ -154,7 +154,7 @@ namespace net.vieapps.Services.Books
 					);
 
 			else if (File.Exists(filePath))
-				this.List.Append(UtilityService.ReadTextFile(filePath).FromJson<List<StatisticInfo>>());
+				this.List.Append(new FileInfo(filePath).ReadAsText().FromJson<List<StatisticInfo>>());
 		}
 
 		internal void Save(string path, string filename, bool seperatedByFirstChar = false)
@@ -165,11 +165,11 @@ namespace net.vieapps.Services.Books
 				Utility.Chars.ForEach(@char =>
 				{
 					var list = this.Find(@char);
-					UtilityService.WriteTextFile(string.Format(filePath, @char), (list?.ToJArray() ?? new JArray()).ToString(Formatting.Indented));
+					(list?.ToJArray() ?? new JArray()).ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(string.Format(filePath, @char));
 				});
 
 			else
-				UtilityService.WriteTextFile(filePath, this.ToJson().ToString(Formatting.Indented));
+				this.ToJson().ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(filePath);
 		}
 		#endregion
 

@@ -434,7 +434,7 @@ namespace net.vieapps.Services.Books
 				throw new InformationNotFoundException();
 
 			// prepare old values
-			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
+			var bookJson = await book.GetBookAsync(cancellationToken).ConfigureAwait(false);
 			var name = book.Name;
 			var category = book.Category;
 			var author = book.Author;
@@ -487,18 +487,15 @@ namespace net.vieapps.Services.Books
 				book.TotalChapters = bookJson.TotalChapters = bookJson.Chapters.Count;
 
 				// update JSON file
-				await UtilityService.WriteTextFileAsync(
-					Utility.GetBookFilePath(bookJson.Name) + ".json",
-					bookJson.ToJson(false, false, json =>
-					{
-						new[] { "Counters", "RatingPoints", "LastUpdated" }.ForEach(attr => json.Remove(attr));
-						json["PermanentID"] = bookJson.GetPermanentID();
-						json["Credits"] = bookJson.Credits ?? "";
-						json["Stylesheet"] = bookJson.Stylesheet ?? "";
-						json["TOCs"] = bookJson.TOCs.ToJArray();
-						json["Chapters"] = bookJson.Chapters.ToJArray();
-					}).ToString(Formatting.Indented)
-				).ConfigureAwait(false);
+				await bookJson.ToJson(false, false, json =>
+				{
+					new[] { "Counters", "RatingPoints", "LastUpdated" }.ForEach(attr => json.Remove(attr));
+					json["PermanentID"] = bookJson.GetPermanentID();
+					json["Credits"] = bookJson.Credits ?? "";
+					json["Stylesheet"] = bookJson.Stylesheet ?? "";
+					json["TOCs"] = bookJson.TOCs.ToJArray();
+					json["Chapters"] = bookJson.Chapters.ToJArray();
+				}).ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(Utility.GetBookFilePath(bookJson.Name) + ".json").ConfigureAwait(false);
 
 				// old files
 				if (!name.IsEquals(bookJson.Name))
@@ -719,9 +716,9 @@ namespace net.vieapps.Services.Books
 			if (File.Exists(Path.Combine(book.GetBookDirectory(), filename)))
 				File.Copy(Path.Combine(book.GetBookDirectory(), filename), filepath, true);
 			else
-				await UtilityService.WriteTextFileAsync(filepath, book.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
+				await book.ToJson().ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(filepath).ConfigureAwait(false);
 
-			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(filepath).ConfigureAwait(false));
+			var json = JObject.Parse(await new FileInfo(filepath).ReadAsTextAsync().ConfigureAwait(false));
 			if (string.IsNullOrWhiteSpace(sourceUrl))
 				sourceUrl = json.Get<string>("SourceUrl") ?? json.Get<string>("SourceUri");
 
@@ -1149,7 +1146,8 @@ namespace net.vieapps.Services.Books
 			if (!File.Exists(filePath + ".epub") || !File.Exists(filePath + ".mobi"))
 			{
 				// update flag
-				await Task.WhenAll(
+				await Task.WhenAll
+				(
 					Utility.Cache.SetAsync(flag, book.ID, 7, this.CancellationTokenSource.Token),
 					this.IsDebugLogEnabled ? this.WriteLogsAsync(correlationID, $"Start to generate e-book files [{book.Name} => {flag}]", null, this.ServiceName, "Generators") : Task.CompletedTask
 				).ConfigureAwait(false);
@@ -1309,7 +1307,7 @@ namespace net.vieapps.Services.Books
 				// cover image
 				if (!string.IsNullOrWhiteSpace(book.Cover))
 				{
-					var coverData = UtilityService.ReadBinaryFile(book.Cover.NormalizeMediaFilePaths(book));
+					var coverData = new FileInfo(book.Cover.NormalizeMediaFilePaths(book)).ReadAsBinary();
 					if (coverData != null && coverData.Length > 0)
 					{
 						var coverId = epub.AddImageData("cover.jpg", coverData);
@@ -1372,7 +1370,7 @@ namespace net.vieapps.Services.Books
 						end = chapter.PositionOf(@char.ToString(), start + 1);
 
 						var image = chapter.Substring(start, end - start);
-						var imageData = UtilityService.ReadBinaryFile(image.Replace("file://", ""));
+						var imageData = new FileInfo(image.Replace("file://", "")).ReadAsBinary();
 						if (imageData != null && imageData.Length > 0)
 							epub.AddImageData(image, imageData);
 
@@ -1520,7 +1518,7 @@ namespace net.vieapps.Services.Books
 				content += body + "</body>\n" + "</html>";
 
 				// geneate HTML file
-				UtilityService.WriteTextFile(filePath + filename + ".html", content, false);
+				new[] { content }.SaveTo(Path.Combine(filePath, filename + ".html"), false);
 
 				// prepare NCX
 				if (book.TOCs != null && book.TOCs.Count > 0)
@@ -1546,7 +1544,7 @@ namespace net.vieapps.Services.Books
 					content += "</navMap>" + "\n" + "</ncx>";
 
 					// geneate NCX file
-					UtilityService.WriteTextFile(filePath + filename + ".ncx", content, false);
+					new[] { content }.SaveTo(Path.Combine(filePath, filename + ".ncx"), false);
 				}
 
 				// prepare OPF
@@ -1575,7 +1573,7 @@ namespace net.vieapps.Services.Books
 					+ "</package>";
 
 				// generate OPF
-				UtilityService.WriteTextFile(filePath + filename + ".opf", content, false);
+				new[] { content }.SaveTo(Path.Combine(filePath, filename + ".opf"), false);
 
 				// generate MOBI
 				var generator = UtilityService.GetAppSetting("Books:AmazonKindlegen", "AmazonKindlegen");

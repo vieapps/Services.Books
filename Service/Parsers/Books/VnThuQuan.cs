@@ -1,7 +1,6 @@
 ﻿#region Related components
 using System;
 using System.IO;
-using System.Net;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
@@ -145,7 +144,12 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			{
 				directoryOfImages = directoryOfImages ?? "temp";
 				onStartDownload?.Invoke(this, directoryOfImages);
-				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, Path.Combine(directoryOfImages, this.PermanentID + "-" + uri.GetFilename()), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
+				await Task.WhenAll(this.MediaFileUrls.Select(async uri => await UtilityService.DownloadAsync(uri, new Dictionary<string, string> { ["Referer"] = this.SourceUrl }, 300, cancellationToken, async (_, stream, time) =>
+				{
+					var path = Path.Combine(directoryOfImages, this.PermanentID + "-" + uri.GetFilename());
+					await stream.SaveAsBinaryAsync(path, cancellationToken).ConfigureAwait(false);
+					onDownloadCompleted?.Invoke(uri, path, time);
+				}, onDownloadError).ConfigureAwait(false))).ConfigureAwait(false);
 			}
 
 			// normalize TOC

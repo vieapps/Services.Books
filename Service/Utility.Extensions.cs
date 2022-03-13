@@ -263,20 +263,21 @@ namespace net.vieapps.Services.Books
 		#region Get HTMLs
 		internal static async Task<string> GetHtmlAsync(this string url, string method = "GET", Dictionary<string, string> header = null, int timeout = 90, string referUrl = null, string body = null, CancellationToken cancellationToken = default)
 		{
-			using (var response = ("POST".IsEquals(method) || "PUT".IsEquals(method))
-				? await UtilityService.SendHttpRequestAsync(url, "POST", header, body, "application/x-www-form-urlencoded", UtilityService.MobileUserAgent, referUrl, timeout, null, null, cancellationToken).ConfigureAwait(false)
-				: await UtilityService.SendHttpRequestAsync(url, "GET", header, null, null, UtilityService.MobileUserAgent, referUrl, timeout, null, null, cancellationToken).ConfigureAwait(false)
-			)
+			var headers = new Dictionary<string, string>(header ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase)
 			{
-				using (var stream = response.GetResponseStream())
-				{
-					using (var reader = new StreamReader(stream, true))
-					{
-						var html = await reader.ReadToEndAsync().WithCancellationToken(cancellationToken).ConfigureAwait(false);
-						return html.HtmlDecode();
-					}
-				}
-			}
+				["User-Agent"] = UtilityService.MobileUserAgent,
+				["Referer"] = referUrl
+			};
+			if ("POST".IsEquals(method) || "PUT".IsEquals(method))
+				headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8";
+
+			using (var response = ("POST".IsEquals(method) || "PUT".IsEquals(method))
+				? await UtilityService.SendHttpRequestAsync(url, "POST", headers, body, timeout, cancellationToken).ConfigureAwait(false)
+				: await UtilityService.SendHttpRequestAsync(url, "GET", headers, null, timeout, cancellationToken).ConfigureAwait(false)
+			)
+            {
+				return await response.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            }
 		}
 
 		internal static Task<string> GetVnThuQuanHtmlAsync(this string url, string method = "GET", string referUrl = null, string body = null, CancellationToken cancellationToken = default)
@@ -284,8 +285,8 @@ namespace net.vieapps.Services.Books
 				method,
 				new Dictionary<string, string>
 				{
-					["origin"] = "https://vnthuquan.net",
-					["cookie"] = $"AspxAutoDetectCookieSupport=1; ASP.NET_SessionId={UtilityService.GetAppSetting("Books:Crawler-VnThuQuan-SessionID", "lzr5vo45wfkqnrz3t4kv3545")}"
+					["Origin"] = "https://vnthuquan.net",
+					["Cookie"] = $"AspxAutoDetectCookieSupport=1,ASP.NET_SessionId={UtilityService.GetAppSetting("Books:Crawler-VnThuQuan-SessionID", "lzr5vo45wfkqnrz3t4kv3545")}"
 				},
 				90,
 				referUrl,
@@ -298,8 +299,8 @@ namespace net.vieapps.Services.Books
 				method,
 				new Dictionary<string, string>
 				{
-					["origin"] = "https://isach.info",
-					["cookie"] = $"PHPSESSID={UtilityService.GetAppSetting("Books:Crawler-ISach-SessionID", "gq0hsrdc4cj05basmv5poa5844")}"
+					["Origin"] = "https://isach.info",
+					["Cookie"] = $"PHPSESSID={UtilityService.GetAppSetting("Books:Crawler-ISach-SessionID", "gq0hsrdc4cj05basmv5poa5844")}"
 				},
 				90,
 				referUrl,

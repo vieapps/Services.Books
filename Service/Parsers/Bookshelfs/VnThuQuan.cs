@@ -38,7 +38,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		{
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "vnthuquan.net.status.json";
 			var json = File.Exists(filePath)
-				? JObject.Parse(UtilityService.ReadTextFile(filePath))
+				? JObject.Parse(new FileInfo(filePath).ReadAsText())
 				: new JObject
 				{
 					{ "TotalPages", 0 },
@@ -64,7 +64,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 			var json = JObject.FromObject(this);
 			json.Add(new JProperty("LastActivity", DateTime.Now));
-			UtilityService.WriteTextFile(folder + @"\vnthuquan.net.status.json", json.ToString(Formatting.Indented));
+			json.ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(Path.Combine(folder, "vnthuquan.net.status.json")).Run(true);
 
 			return this;
 		}

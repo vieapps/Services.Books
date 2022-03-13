@@ -53,7 +53,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 		{
 			var filePath = (!string.IsNullOrWhiteSpace(folder) ? folder + @"\" : "") + "isach.info.status.json";
 			var json = File.Exists(filePath)
-				? JObject.Parse(UtilityService.ReadTextFile(filePath))
+				? JObject.Parse(new FileInfo(filePath).ReadAsText())
 				: new JObject
 				{
 					{ "TotalPages", 0 },
@@ -84,7 +84,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 			var json = JObject.FromObject(this);
 			json.Add(new JProperty("LastActivity", DateTime.Now));
-			UtilityService.WriteTextFile(folder + @"\isach.info.status.json", json.ToString(Formatting.Indented));
+			json.ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(Path.Combine(folder, "isach.info.status.json")).Run(true);
 
 			return this;
 		}
@@ -167,7 +167,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 			var html = "";
 			try
 			{
-				html = await UtilityService.FetchHttpAsync(url, UtilityService.SpiderUserAgent, this.ReferUrl, cancellationToken).ConfigureAwait(false);
+				html = await UtilityService.FetchHttpAsync(url, new Dictionary<string, string> { ["User-Agent"] = UtilityService.SpiderUserAgent, ["Referer"] = this.ReferUrl }, 90, cancellationToken).ConfigureAwait(false);
 			}
 			catch (Exception ex)
 			{

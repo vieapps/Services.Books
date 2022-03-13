@@ -6,9 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
-
 using Newtonsoft.Json;
-
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Security;
 #endregion
@@ -54,7 +52,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 
 				// get HTML of the book
 				this.SourceUrl = "https://isach.info/mobile/story.php?story=" + (url ?? this.SourceUrl).GetIdentity();
-				var html = await UtilityService.FetchHttpAsync(this.SourceUrl, UtilityService.SpiderUserAgent, this.ReferUrl, cancellationToken).ConfigureAwait(false);
+				var html = await UtilityService.FetchHttpAsync(this.SourceUrl, new Dictionary<string, string> { ["User-Agent"] = UtilityService.SpiderUserAgent, ["Referer"] = this.ReferUrl }, 90, cancellationToken).ConfigureAwait(false);
 
 				// check permission
 				if (html.PositionOf("Để đọc tác phẩm này, được yêu cầu phải đăng nhập") > 0)
@@ -88,7 +86,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 		public async Task<IBookParser> FetchAsync(string url = null,
 			Action<IBookParser> onStart = null, Action<IBookParser, long> onParsed = null, Action<IBookParser, long> onCompleted = null,
 			Action<int> onStartFetchChapter = null, Action<int, List<string>, long> onFetchChapterCompleted = null, Action<int, Exception> onFetchChapterError = null,
-			string folderOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
+			string directoryOfImages = null, Action<IBookParser, string> onStartDownload = null, Action<string, string, long> onDownloadCompleted = null, Action<string, Exception> onDownloadError = null,
 			bool parallelExecutions = false, CancellationToken cancellationToken = default)
 		{
 			// prepare
@@ -216,9 +214,14 @@ namespace net.vieapps.Services.Books.Parsers.Books
 			// download image files
 			if (this.MediaFileUrls.Count > 0)
 			{
-				folderOfImages = folderOfImages ?? "temp";
-				onStartDownload?.Invoke(this, folderOfImages);
-				await Task.WhenAll(this.MediaFileUrls.Select(uri => UtilityService.DownloadFileAsync(uri, Path.Combine(folderOfImages, this.PermanentID + "-" + uri.GetFilename()), this.SourceUrl, onDownloadCompleted, onDownloadError, cancellationToken))).ConfigureAwait(false);
+				directoryOfImages = directoryOfImages ?? "temp";
+				onStartDownload?.Invoke(this, directoryOfImages);
+				await Task.WhenAll(this.MediaFileUrls.Select(async uri => await UtilityService.DownloadAsync(uri, new Dictionary<string, string> { ["Referer"] = this.SourceUrl }, 300, cancellationToken, async (_, stream, time) =>
+				{
+					var path = Path.Combine(directoryOfImages, this.PermanentID + "-" + uri.GetFilename());
+					await stream.SaveAsBinaryAsync(path, cancellationToken).ConfigureAwait(false);
+					onDownloadCompleted?.Invoke(uri, path, time);
+				}, onDownloadError).ConfigureAwait(false))).ConfigureAwait(false);
 			}
 
 			// normalize TOC
@@ -249,7 +252,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				stopwatch.Start();
 
 				// get the HTML of the chapter
-				var html = await UtilityService.FetchHttpAsync(chapterUrl, UtilityService.SpiderUserAgent, this.SourceUrl, cancellationToken).ConfigureAwait(false);
+				var html = await UtilityService.FetchHttpAsync(chapterUrl, new Dictionary<string, string> { ["User-Agent"] = UtilityService.SpiderUserAgent, ["Referer"] = this.SourceUrl }, 90, cancellationToken).ConfigureAwait(false);
 
 				// parse the chapter
 				var contents = new List<string>();
@@ -349,7 +352,7 @@ namespace net.vieapps.Services.Books.Parsers.Books
 				{
 					var tocUrl = "https://isach.info" + html.Substring(start + 9, end - start - 9).Trim();
 					await Task.Delay(UtilityService.GetRandomNumber(123, 432), cancellationToken).ConfigureAwait(false);
-					html = await UtilityService.FetchHttpAsync(tocUrl, null, UtilityService.SpiderUserAgent, this.SourceUrl, 90, null, null, cancellationToken).ConfigureAwait(false);
+					html = await UtilityService.FetchHttpAsync(tocUrl, new Dictionary<string, string> { ["User-Agent"] = UtilityService.SpiderUserAgent, ["Referer"] = this.SourceUrl }, 90, cancellationToken).ConfigureAwait(false);
 				}
 			}
 

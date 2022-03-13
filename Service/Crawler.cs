@@ -41,10 +41,10 @@ namespace net.vieapps.Services.Books
 				{
 					this.Logs.Add(ex.Message + " [" + ex.GetType() + "]");
 					this.Logs.Add(ex.StackTrace);
-					if (ex is RemoteServerErrorException)
+					if (ex is RemoteServerException remoteServerException)
 					{
-						this.Logs.Add($"- URL: {(ex as RemoteServerErrorException).ResponseURL}");
-						this.Logs.Add($"- Body: {(ex as RemoteServerErrorException).ResponseBody}");
+						this.Logs.Add($"- URL: {remoteServerException.URI}");
+						this.Logs.Add($"- Body: {remoteServerException.Body}");
 					}
 				}
 			}
@@ -56,7 +56,7 @@ namespace net.vieapps.Services.Books
 			this.MaxPages = UtilityService.GetAppSetting("Books:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
-			Task.Run(() => this.StartAsync(onUpdate, onCompleted, onError, cancellationToken)).ConfigureAwait(false);
+			this.StartAsync(onUpdate, onCompleted, onError, cancellationToken).Run();
 		}
 
 		async Task StartAsync(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default)
@@ -64,7 +64,8 @@ namespace net.vieapps.Services.Books
 			try
 			{
 				var stopwatch = Stopwatch.StartNew();
-				await Task.WhenAll(
+				await Task.WhenAll
+				(
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-VnThuQuan", "true")) ? this.RunVnThuQuanCrawlerAsync(onUpdate, cancellationToken) : Task.CompletedTask,
 					"true".IsEquals(UtilityService.GetAppSetting("Books:Crawler-ISach", "true")) ? this.RunISachCrawlerAsync(onUpdate, cancellationToken) : Task.CompletedTask
 				).ConfigureAwait(false);
@@ -90,7 +91,7 @@ namespace net.vieapps.Services.Books
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
 			{
-				var jsonParsers = JArray.Parse(await UtilityService.ReadTextFileAsync(filePath, null, cancellationToken).ConfigureAwait(false));
+				var jsonParsers = JArray.Parse(await new FileInfo(filePath).ReadAsTextAsync(cancellationToken).ConfigureAwait(false));
 				foreach (JObject jsonParser in jsonParsers)
 					bookParsers.Add(jsonParser.Copy<Parsers.Books.VnThuQuan>());
 			}
@@ -139,7 +140,7 @@ namespace net.vieapps.Services.Books
 
 			// cleanup
 			if (errorParsers.Count > 0)
-				await UtilityService.WriteTextFileAsync(filePath, errorParsers.ToJArray().ToString(Formatting.Indented)).ConfigureAwait(false);
+				await errorParsers.ToJArray().ToString(Formatting.Indented).ToBytes().SaveAsTextAsync(filePath, cancellationToken).ConfigureAwait(false);
 			else if (File.Exists(filePath))
 				File.Delete(filePath);
 
@@ -154,7 +155,7 @@ namespace net.vieapps.Services.Books
 			// prepare
 			try
 			{
-				await UtilityService.FetchHttpAsync("https://isach.info/robots.txt", UtilityService.SpiderUserAgent, null, cancellationToken).ConfigureAwait(false);
+				await new Uri("https://isach.info/robots.txt").FetchHttpAsync(new Dictionary<string, string> { ["User-Agent"] = UtilityService.SpiderUserAgent }, 90, cancellationToken).ConfigureAwait(false);
 			}
 			catch { }
 
@@ -163,7 +164,7 @@ namespace net.vieapps.Services.Books
 			var bookParsers = new List<IBookParser>();
 			if (File.Exists(filePath))
 			{
-				var jsonParsers = JArray.Parse(await UtilityService.ReadTextFileAsync(filePath).ConfigureAwait(false));
+				var jsonParsers = JArray.Parse(await new FileInfo(filePath).ReadAsTextAsync().ConfigureAwait(false));
 				foreach (JObject jsonParser in jsonParsers)
 					bookParsers.Add(jsonParser.Copy<Parsers.Books.ISach>());
 			}
@@ -238,7 +239,7 @@ namespace net.vieapps.Services.Books
 
 			// cleanup
 			if (errorParsers.Count > 0)
-				await UtilityService.WriteTextFileAsync(filePath, errorParsers.ToJArray().ToString(Formatting.Indented)).ConfigureAwait(false);
+				await errorParsers.ToJArray().ToString(Formatting.Indented).ToBytes().SaveAsTextAsync(filePath, cancellationToken).ConfigureAwait(false);
 			else if (File.Exists(filePath))
 				File.Delete(filePath);
 
@@ -272,7 +273,7 @@ namespace net.vieapps.Services.Books
 
 			// write JSON file
 			parser.TotalChapters = parser.Chapters.Count;
-			await UtilityService.WriteTextFileAsync(Path.Combine(directory, UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json"), parser.ToJson().ToString(Formatting.Indented)).ConfigureAwait(false);
+			await parser.ToJson().ToString(Formatting.Indented).ToBytes().SaveAsTextAsync(Path.Combine(directory, UtilityService.GetNormalizedFilename(parser.Title + " - " + parser.Author) + ".json"), cancellationToken).ConfigureAwait(false);
 
 			// update & return
 			await this.UpdateAsync(parser.Title, parser.Author, directory, onUpdate, cancellationToken).ConfigureAwait(false);
@@ -290,7 +291,7 @@ namespace net.vieapps.Services.Books
 				return null;
 
 			// update database
-			var json = JObject.Parse(await UtilityService.ReadTextFileAsync(Path.Combine(folder, filename)).ConfigureAwait(false));
+			var json = JObject.Parse(await new FileInfo(Path.Combine(folder, filename)).ReadAsTextAsync(cancellationToken).ConfigureAwait(false));
 			var id = json["ID"] != null
 				? (json["ID"] as JValue).Value as string
 				: null;

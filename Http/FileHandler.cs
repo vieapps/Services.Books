@@ -253,7 +253,7 @@ namespace net.vieapps.Services.Books
 					File.Delete(filePath);
 				}
 				catch { }
-			await UtilityService.WriteBinaryFileAsync(filePath, content, false, cancellationToken).ConfigureAwait(false);
+			await content.SaveAsBinaryAsync(filePath, cancellationToken).ConfigureAwait(false);
 
 			// response
 			await context.WriteAsync(new JObject
