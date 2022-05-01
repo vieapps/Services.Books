@@ -5,12 +5,9 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-
 using Newtonsoft.Json.Linq;
-
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Security;
 #endregion
