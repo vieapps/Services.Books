@@ -143,7 +143,7 @@ namespace net.vieapps.Services.Books
 				Utility.Chars
 					.Where(@char => File.Exists(string.Format(filePath, @char)))
 					.ForEach(@char => new FileInfo(string.Format(filePath, @char)).ReadAsText()
-						.FromJson<List<StatisticInfo>>()
+						.ToJson().As<List<StatisticInfo>>()
 						.Where(item => item != null)
 						.ForEach(item => this.List.Add(new StatisticInfo
 						{
@@ -154,7 +154,7 @@ namespace net.vieapps.Services.Books
 					);
 
 			else if (File.Exists(filePath))
-				this.List.Append(new FileInfo(filePath).ReadAsText().FromJson<List<StatisticInfo>>());
+				this.List.Append(new FileInfo(filePath).ReadAsText().ToJson().As<List<StatisticInfo>>());
 		}
 
 		internal void Save(string path, string filename, bool seperatedByFirstChar = false)
@@ -188,12 +188,7 @@ namespace net.vieapps.Services.Books
 		public string FirstChar
 		{
 			set => this._FirstChar = value;
-			get
-			{
-				if (this._FirstChar == null)
-					this._FirstChar = this.Name.GetFirstChar().ToUpper();
-				return this._FirstChar;
-			}
+			get => this._FirstChar ?? (this._FirstChar = this.Name.GetFirstChar().ToUpper());
 		}
 	}
 }
