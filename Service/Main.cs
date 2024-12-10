@@ -1,18 +1,14 @@
 ﻿#region Related components
 using System;
 using System.IO;
-using System.Text;
 using System.Linq;
 using System.Dynamic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
 using net.vieapps.Components.Security;
 using net.vieapps.Components.Repository;
 using net.vieapps.Components.Caching;
@@ -208,7 +204,7 @@ namespace net.vieapps.Services.Books
 
 			var pagination = request.Has("Pagination")
 				? request.Get<ExpandoObject>("Pagination").GetPagination()
-				: new Tuple<long, int, int, int>(-1, 0, 20, 1);
+				: (-1, 0, 20, 1);
 
 			var pageSize = pagination.Item3;
 			var pageNumber = pagination.Item4;
@@ -226,7 +222,7 @@ namespace net.vieapps.Services.Books
 					: await Book.CountAsync(query, filter, cancellationToken).ConfigureAwait(false);
 
 
-			var totalPages = new Tuple<long, int>(totalRecords, pageSize).GetTotalPages();
+			var totalPages = (totalRecords, pageSize).GetTotalPages();
 			if (totalPages > 0 && pageNumber > totalPages)
 				pageNumber = totalPages;
 
@@ -235,10 +231,10 @@ namespace net.vieapps.Services.Books
 				? string.IsNullOrWhiteSpace(query)
 					? await Book.FindAsync(filter, sort, pageSize, pageNumber, this.GetCacheKey(filter, sort, pageSize, pageNumber), cancellationToken).ConfigureAwait(false)
 					: await Book.SearchAsync(query, filter, null, pageSize, pageNumber, cancellationToken).ConfigureAwait(false)
-				: new List<Book>();
+				: [];
 
 			// build result
-			pagination = new Tuple<long, int, int, int>(totalRecords, totalPages, pageSize, pageNumber);
+			pagination = (totalRecords, totalPages, pageSize, pageNumber);
 
 			var result = new JObject
 			{
@@ -908,7 +904,7 @@ namespace net.vieapps.Services.Books
 			// authors
 			Utility.Authors.Clear();
 			var totalRecords = await Book.CountAsync(null, "", this.CancellationTokenSource.Token).ConfigureAwait(false);
-			var totalPages = new Tuple<long, int>(totalRecords, 50).GetTotalPages();
+			var totalPages = (totalRecords, 50).GetTotalPages();
 			await this.WriteLogsAsync(correlationID, $"Total of {totalRecords} books need to process");
 
 			var pageNumber = 0;
