@@ -1706,7 +1706,7 @@ namespace net.vieapps.Services.Books
 			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-30);
-				UtilityService.GetFiles(Utility.FilesPath, "*.epub|*.mobi", true)
+				UtilityService.GetFiles(Utility.FilesPath, "*.epub|*.mobi", 0, true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1723,7 +1723,7 @@ namespace net.vieapps.Services.Books
 			this.StartTimer(() =>
 			{
 				var remainTime = DateTime.Now.AddDays(-90);
-				UtilityService.GetFiles(Utility.DirectoryOfTrashFiles, "*.*", true)
+				UtilityService.GetFiles(Utility.DirectoryOfTrashFiles, "*.*", 0, true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1736,7 +1736,7 @@ namespace net.vieapps.Services.Books
 					});
 
 				remainTime = DateTime.Now.AddDays(-1);
-				UtilityService.GetFiles(Utility.DirectoryOfTempFiles, "*.*", true)
+				UtilityService.GetFiles(Utility.DirectoryOfTempFiles, "*.*", 0, true)
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>

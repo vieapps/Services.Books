@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
 		<WarningLevel>3</WarningLevel>
-		<NoWarn>1573,1591</NoWarn>
+		<NoWarn>1573,1591,NU1701</NoWarn>
 		<RootNamespace>net.vieapps.Services.Books</RootNamespace>
 		<AssemblyName>VIEApps.Services.Books.Http</AssemblyName>
 		<AssemblyTitle>VIEApps NGX Books</AssemblyTitle>
@@ -21,7 +21,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VIEApps.Services.Base.Http" Version="10.9.2412.1" />
+		<PackageReference Include="VIEApps.Services.Base.Http" Version="10.9.2503.2" />
 	</ItemGroup>
 
 </Project>
