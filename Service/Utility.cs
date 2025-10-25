@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using net.vieapps.Components.Caching;
 using net.vieapps.Components.Utility;
 using net.vieapps.Components.Repository;
 #endregion
@@ -13,7 +14,7 @@ namespace net.vieapps.Services.Books
 {
 	public static class Utility
 	{
-		public static Components.Caching.Cache Cache { get; internal set; }
+		public static Components.Caching.Cache Cache { get; } = Cache.CreateInstance("VIEApps-Services-Books", Logger.GetLoggerFactory(), "true".IsEquals(UtilityService.GetAppSetting("Books:Cache:L1")));
 
 		public static string FilesURI { get; internal set; }
 

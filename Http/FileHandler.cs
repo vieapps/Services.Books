@@ -16,7 +16,7 @@ namespace net.vieapps.Services.Books
 {
 	public class FileHandler : Services.FileHandler
 	{
-		public override async Task ProcessRequestAsync(HttpContext context, CancellationToken cancellationToken)
+		public override Task ProcessRequestAsync(HttpContext context, CancellationToken cancellationToken)
 		{
 			if (string.IsNullOrWhiteSpace(FileHandlerExtensions.FilesPath))
 			{
@@ -28,14 +28,14 @@ namespace net.vieapps.Services.Books
 			if (context.Request.Method.IsEquals("GET") || context.Request.Method.IsEquals("HEAD"))
 			{
 				if (context.GetRequestUri().PathAndQuery.IsStartsWith("/books/download/"))
-					await this.DownloadAsync(context, cancellationToken).ConfigureAwait(false);
-				else
-					await this.ShowAsync(context, cancellationToken).ConfigureAwait(false);
+					return this.DownloadAsync(context, cancellationToken);
+				return this.ShowAsync(context, cancellationToken);
 			}
-			else if (context.Request.Method.IsEquals("POST"))
-				await this.ReceiveAsync(context, cancellationToken).ConfigureAwait(false);
-			else
-				throw new MethodNotAllowedException(context.Request.Method);
+
+			if (context.Request.Method.IsEquals("POST"))
+				return this.ReceiveAsync(context, cancellationToken);
+
+			return Task.FromException(new MethodNotAllowedException(context.Request.Method));
 		}
 
 		async Task ShowAsync(HttpContext context, CancellationToken cancellationToken)

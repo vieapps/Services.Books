@@ -23,9 +23,6 @@ namespace net.vieapps.Services.Books
 
 		public override void Start(string[] args = null, bool initializeRepository = true, Action<IService> next = null)
 		{
-			// initialize caching storage
-			Utility.Cache = new Cache($"VIEApps-Services-{this.ServiceName}", Components.Utility.Logger.GetLoggerFactory());
-
 			// prepare URIs and paths
 			Utility.FilesURI = this.GetHttpURI("Files", "https://fs.vieapps.net");
 			while (Utility.FilesURI.EndsWith("/"))
