@@ -622,17 +622,7 @@ namespace net.vieapps.Services.Books
 
 		#region Crawl a book
 		void CrawlBook(RequestInfo requestInfo)
-			=> Task.Run(async () =>
-			{
-				try
-				{
-					await this.CrawlBookAsync(requestInfo).ConfigureAwait(false);
-				}
-				catch (Exception ex)
-				{
-					await this.WriteLogsAsync(requestInfo.CorrelationID, $"Error occurred while crawling => {ex.Message}", ex);
-				}
-			}).ConfigureAwait(false);
+			=> this.CrawlBookAsync(requestInfo).Execute(ex => this.WriteLogsAsync(requestInfo.CorrelationID, $"Error occurred while crawling => {ex.Message}", ex));
 
 		async Task CrawlBookAsync(RequestInfo requestInfo)
 		{
@@ -692,7 +682,7 @@ namespace net.vieapps.Services.Books
 		}
 
 		void ReCrawlBook(Book book, string sourceUrl = null, bool fullRecrawl = false)
-			=> Task.Run(() => this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl)).ConfigureAwait(false);
+			=> this.ReCrawlBookAsync(book, sourceUrl, fullRecrawl).Execute();
 
 		async Task ReCrawlBookAsync(Book book, string sourceUrl = null, bool fullRecrawl = false)
 		{
@@ -1113,7 +1103,7 @@ namespace net.vieapps.Services.Books
 		{
 			// run a task to generate files
 			if (book != null)
-				Task.Run(() => this.GenerateFilesAsync(book)).ConfigureAwait(false);
+				this.GenerateFilesAsync(book).Execute();
 
 			// return status
 			return new JObject
@@ -1154,7 +1144,7 @@ namespace net.vieapps.Services.Books
 				var generatingTasks = new List<Task>();
 
 				if (!status["epub"])
-					generatingTasks.Add(Task.Run(() => this.GenerateEpubFile(
+					generatingTasks.Add(UtilityService.ExecuteTask(() => this.GenerateEpubFile(
 						book,
 						correlationID,
 						p => status["epub"] = true,
@@ -1163,10 +1153,10 @@ namespace net.vieapps.Services.Books
 							status["epub"] = true;
 							this.WriteLogs(correlationID, "Error occurred while generating EPUB file", ex, this.ServiceName, "Generators");
 						}
-					)));
+					), this.CancellationToken));
 
 				if (!status["mobi"])
-					generatingTasks.Add(Task.Run(() => this.GenerateMobiFile(
+					generatingTasks.Add(UtilityService.ExecuteTask(() => this.GenerateMobiFile(
 						book,
 						correlationID,
 						p => status["mobi"] = true,
@@ -1175,7 +1165,7 @@ namespace net.vieapps.Services.Books
 							status["mobi"] = true;
 							this.WriteLogs(correlationID, "Error occurred while generating MOBI file", ex, this.ServiceName, "Generators");
 						}
-					)));
+					), this.CancellationToken));
 
 				// wait for all tasks are completed
 				while (!status["epub"] || !status["mobi"])

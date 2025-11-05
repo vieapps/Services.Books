@@ -84,7 +84,7 @@ namespace net.vieapps.Services.Books.Parsers.Bookshelfs
 
 			var json = JObject.FromObject(this);
 			json.Add(new JProperty("LastActivity", DateTime.Now));
-			json.ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(Path.Combine(folder, "isach.info.status.json")).Run(true);
+			json.ToString(Formatting.Indented).ToBytes().ToMemoryStream().SaveAsTextAsync(Path.Combine(folder, "isach.info.status.json")).Execute(true);
 
 			return this;
 		}

@@ -56,7 +56,7 @@ namespace net.vieapps.Services.Books
 			this.MaxPages = UtilityService.GetAppSetting("Books:Crawler-MaxPages", "1").CastAs<int>();
 			this.Logs.Clear();
 			this.AddLogs($"Total {this.MaxPages} page(s) of each site will be crawled");
-			this.StartAsync(onUpdate, onCompleted, onError, cancellationToken).Run();
+			this.StartAsync(onUpdate, onCompleted, onError, cancellationToken).Execute();
 		}
 
 		async Task StartAsync(Func<Book, CancellationToken, Task> onUpdate, Action<long> onCompleted, Action<Exception> onError, CancellationToken cancellationToken = default)
