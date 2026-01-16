@@ -21,7 +21,7 @@ namespace net.vieapps.Services.Books
 	{
 		public override string ServiceName => "Books";
 
-		public override void Start(string[] args = null, bool initializeRepository = true, Action<IService> next = null)
+		public override Task StartAsync(string[] args = null, bool initializeRepository = true, Action<IService> next = null)
 		{
 			// prepare URIs and paths
 			Utility.FilesURI = this.GetHttpURI("Files", "https://fs.vieapps.net");
@@ -32,7 +32,7 @@ namespace net.vieapps.Services.Books
 				Utility.FilesPath += $"{Path.DirectorySeparatorChar}";
 
 			// characters
-			Utility.Chars = new List<string> { "0" };
+			Utility.Chars = ["0"];
 			for (char @char = 'A'; @char <= 'Z'; @char++)
 				Utility.Chars.Add($"{@char}");
 
@@ -52,28 +52,25 @@ namespace net.vieapps.Services.Books
 				}
 				new[] { Utility.DirectoryOfDataFiles, Utility.DirectoryOfStatisticFiles, Utility.DirectoryOfContributedFiles }.ForEach(directory => createDirectory(directory, false));
 				Utility.Chars.Select(@char => Path.Combine(Utility.DirectoryOfDataFiles, @char.ToLower()))
-					.Concat(new[] { Path.Combine(Utility.DirectoryOfContributedFiles, "users"), Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers"), Utility.DirectoryOfTempFiles, Utility.DirectoryOfTrashFiles })
+					.Concat([Path.Combine(Utility.DirectoryOfContributedFiles, "users"), Path.Combine(Utility.DirectoryOfContributedFiles, "crawlers"), Utility.DirectoryOfTempFiles, Utility.DirectoryOfTrashFiles])
 					.ForEach(directory => createDirectory(directory));
 			}
 
 			// start the service
-			base.Start(args, initializeRepository, _ =>
+			return base.StartAsync(args, initializeRepository, _ =>
 			{
 				this.RegisterTimers(args);
 				next?.Invoke(this);
 			});
 		}
 
-		public override void Dispose(string[] args, bool available = true, bool disconnect = true, Action<IService> next = null)
-			=> base.Dispose(args, available, disconnect, _ =>
+		public override ValueTask DisposeAsync(string[] args, bool available = true, bool disconnect = true, Action<IService> next = null)
+			=> base.DisposeAsync(args, available, disconnect, _ =>
 			{
 				if (this.Timers.Count > 0)
 					this.FlushStatistics();
 				next?.Invoke(this);
 			});
-
-		~ServiceComponent()
-			=> this.Dispose();
 
 		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default)
 		{
@@ -150,10 +147,10 @@ namespace net.vieapps.Services.Books
 		}
 
 		protected override Privileges Privileges
-			=> new Privileges(true)
+			=> new(true)
 			{
-				ContributiveRoles = new HashSet<string> { SystemRole.Authenticated.ToString() },
-				DownloadableRoles = new HashSet<string> { SystemRole.Authenticated.ToString() }
+				ContributiveRoles = [SystemRole.Authenticated.ToString()],
+				DownloadableRoles = [SystemRole.Authenticated.ToString()]
 			};
 
 		Task<JObject> ProcessBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
@@ -281,9 +278,7 @@ namespace net.vieapps.Services.Books
 				? objectIdentity
 				: requestInfo.GetQueryParameter("x-object-id") ?? requestInfo.GetQueryParameter("object-id") ?? requestInfo.GetQueryParameter("book-id") ?? requestInfo.GetQueryParameter("id");
 
-			var book = await Book.GetAsync<Book>(objectID, cancellationToken).ConfigureAwait(false);
-			if (book == null)
-				throw new InformationNotFoundException();
+			var book = await Book.GetAsync<Book>(objectID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 
 			// load from JSON file if has no chapter
 			Book bookJson = null;

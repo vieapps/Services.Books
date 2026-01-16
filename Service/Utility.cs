@@ -14,7 +14,7 @@ namespace net.vieapps.Services.Books
 {
 	public static class Utility
 	{
-		public static Components.Caching.Cache Cache { get; } = Cache.CreateInstance("VIEApps-Services-Books", Logger.GetLoggerFactory(), "true".IsEquals(UtilityService.GetAppSetting("Books:Cache:L1")));
+		public static Cache Cache { get; } = Cache.CreateInstance("VIEApps-Services-Books", Logger.GetLoggerFactory(), "true".IsEquals(UtilityService.GetAppSetting("Books:Cache:L1")));
 
 		public static string FilesURI { get; internal set; }
 
@@ -152,8 +152,8 @@ namespace net.vieapps.Services.Books
 					? json.Get<string>("SourceUri")
 					: "";
 
-			book.TOCs = json.Get<JArray>("TOCs")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? new List<string>();
-			book.Chapters = json.Get<JArray>("Chapters")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? new List<string>();
+			book.TOCs = json.Get<JArray>("TOCs")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? [];
+			book.Chapters = json.Get<JArray>("Chapters")?.Select(item => item as JValue).Select(item => item.Value as string).ToList() ?? [];
 		}
 		#endregion
 

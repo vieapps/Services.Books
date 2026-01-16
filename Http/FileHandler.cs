@@ -32,10 +32,7 @@ namespace net.vieapps.Services.Books
 				return this.ShowAsync(context, cancellationToken);
 			}
 
-			if (context.Request.Method.IsEquals("POST"))
-				return this.ReceiveAsync(context, cancellationToken);
-
-			return Task.FromException(new MethodNotAllowedException(context.Request.Method));
+			return context.Request.Method.IsEquals("POST") ? this.ReceiveAsync(context, cancellationToken) : Task.FromException(new MethodNotAllowedException(context.Request.Method));
 		}
 
 		async Task ShowAsync(HttpContext context, CancellationToken cancellationToken)
