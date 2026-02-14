@@ -305,13 +305,13 @@ namespace net.vieapps.Services.Books
 				var result = await this.UpdateCounterAsync(book, requestInfo.GetParameter("x-action") ?? requestInfo.GetParameter("action") ?? "View", cancellationToken).ConfigureAwait(false);
 
 				// send update message
-				await this.SendUpdateMessageAsync(new UpdateMessage
+				new UpdateMessage
 				{
 					DeviceID = "*",
 					ExcludedDeviceID = requestInfo.Session.DeviceID,
 					Type = $"{this.ServiceName}#Book#Counters",
 					Data = result
-				}, cancellationToken).ConfigureAwait(false);
+				}.Send();
 
 				// return update
 				return result;
@@ -357,7 +357,7 @@ namespace net.vieapps.Services.Books
 				var sourceUrl = requestInfo.Query.ContainsKey("url") ? requestInfo.Query["url"] : null;
 				var fullRecrawl = requestInfo.Query.ContainsKey("full") && "true".IsEquals(requestInfo.Query["full"]);
 				this.ReCrawlBook(book, sourceUrl, fullRecrawl);
-				return new JObject();
+				return new();
 			}
 
 			// book information
