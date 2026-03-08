@@ -1083,7 +1083,7 @@ namespace net.vieapps.Services.Books
 				File.Copy(source + filename, destination + filename, true);
 				var permanentID = Utility.GetBookAttribute(source + filename, "PermanentID");
 				(await UtilityService.GetFilesAsync(source + Definitions.MediaDirectory, permanentID + "-*.*").ConfigureAwait(false))
-					.ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaDirectory + @"\" + file.Name, true));
+					.Select(filePath => new FileInfo(filePath)).ForEach(file => File.Copy(file.FullName, destination + Definitions.MediaDirectory + @"\" + file.Name, true));
 			}
 
 			return new JObject
@@ -1564,7 +1564,7 @@ namespace net.vieapps.Services.Books
 						File.Move(filePath + filename + ".mobi", filePath + UtilityService.GetNormalizedFilename(book.Name) + ".mobi");
 
 						// delete temporary files
-						UtilityService.GetFiles(filePath, filename + ".*").ForEach(file =>
+						UtilityService.GetFiles(filePath, filename + ".*").Select(path => new FileInfo(path)).ForEach(file =>
 						{
 							try
 							{
@@ -1589,7 +1589,7 @@ namespace net.vieapps.Services.Books
 			}
 			catch (Exception ex)
 			{
-				UtilityService.GetFiles(filePath, $"{filename}.*").ForEach(file =>
+				UtilityService.GetFiles(filePath, $"{filename}.*").Select(path => new FileInfo(path)).ForEach(file =>
 				{
 					try
 					{
@@ -1689,6 +1689,7 @@ namespace net.vieapps.Services.Books
 			{
 				var remainTime = DateTime.Now.AddDays(-30);
 				UtilityService.GetFiles(Utility.FilesPath, "*.epub|*.mobi", 0, true)
+					.Select(filePath => new FileInfo(filePath))
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1706,6 +1707,7 @@ namespace net.vieapps.Services.Books
 			{
 				var remainTime = DateTime.Now.AddDays(-90);
 				UtilityService.GetFiles(Utility.DirectoryOfTrashFiles, "*.*", 0, true)
+					.Select(filePath => new FileInfo(filePath))
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>
@@ -1719,6 +1721,7 @@ namespace net.vieapps.Services.Books
 
 				remainTime = DateTime.Now.AddDays(-1);
 				UtilityService.GetFiles(Utility.DirectoryOfTempFiles, "*.*", 0, true)
+					.Select(filePath => new FileInfo(filePath))
 					.Where(file => file.LastWriteTime < remainTime)
 					.ToList()
 					.ForEach(file =>

@@ -317,6 +317,7 @@ namespace net.vieapps.Services.Books
 			File.Copy(Path.Combine(folder, filename), Path.Combine(path, filename), true);
 			File.Delete(Path.Combine(folder, filename));
 			UtilityService.GetFiles(Path.Combine(folder, Definitions.MediaDirectory), book.PermanentID + "-*.*")
+				.Select(filePath => new FileInfo(filePath))
 				.ForEach(file =>
 				{
 					File.Copy(file.FullName, Path.Combine(path, Definitions.MediaDirectory, file.Name), true);
