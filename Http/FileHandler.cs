@@ -82,8 +82,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// response
-			context.SetResponseHeaders((int)HttpStatusCode.OK, fileInfo.GetMimeType(), eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), context.GetCorrelationID());
-			await context.WriteAsync(fileInfo, cancellationToken).ConfigureAwait(false);
+			await context.SendFileAsync(fileInfo, null, null, eTag, fileInfo.LastWriteTime.ToUnixTimestamp(), "public", TimeSpan.FromDays(7), null, context.GetCorrelationID(), cancellationToken).ConfigureAwait(false);
 			if (Global.IsDebugLogEnabled)
 				await context.WriteLogsAsync(this.Logger, "Http.Books", $"Show file successful ({requestUri})").ConfigureAwait(false);
 		}
