@@ -211,6 +211,6 @@ namespace net.vieapps.Services.Books
 		internal static Task<Book> GetAsync(string title, string author, CancellationToken cancellationToken = default)
 			=> string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author)
 				? Task.FromResult<Book>(null)
-				: Book.GetAsync<Book>(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), null, null, cancellationToken);
+				: Book.GetAsync(Filters<Book>.And(Filters<Book>.Equals("Title", title), Filters<Book>.Equals("Author", author)), cancellationToken);
 	}
 }

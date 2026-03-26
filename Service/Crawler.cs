@@ -297,7 +297,7 @@ namespace net.vieapps.Services.Books
 				: null;
 			var book = string.IsNullOrWhiteSpace(id) || !id.IsValidUUID()
 				? await Book.GetAsync(title, author, cancellationToken).ConfigureAwait(false)
-				: await Book.GetAsync<Book>(id, cancellationToken).ConfigureAwait(false);
+				: await Book.GetAsync(id, cancellationToken).ConfigureAwait(false);
 
 			if (book != null)
 			{

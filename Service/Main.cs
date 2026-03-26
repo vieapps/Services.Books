@@ -278,7 +278,7 @@ namespace net.vieapps.Services.Books
 				? objectIdentity
 				: requestInfo.GetQueryParameter("x-object-id") ?? requestInfo.GetQueryParameter("object-id") ?? requestInfo.GetQueryParameter("book-id") ?? requestInfo.GetQueryParameter("id");
 
-			var book = await Book.GetAsync<Book>(objectID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
+			var book = await Book.GetAsync(objectID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 
 			// load from JSON file if has no chapter
 			Book bookJson = null;
@@ -417,7 +417,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// prepare
-			var book = await Book.GetAsync<Book>(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
+			var book = await Book.GetAsync(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
 			if (book == null)
 				throw new InformationNotFoundException();
 
@@ -577,7 +577,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// prepare
-			var book = await Book.GetAsync<Book>(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
+			var book = await Book.GetAsync(requestInfo.GetObjectIdentity(), cancellationToken).ConfigureAwait(false);
 			if (book == null)
 				throw new InformationNotFoundException();
 
@@ -586,7 +586,7 @@ namespace net.vieapps.Services.Books
 			var bookJson = await book.GetBookAsync().ConfigureAwait(false);
 
 			// delete from database
-			await Book.DeleteAsync<Book>(book.ID, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
+			await Book.DeleteAsync(book.ID, requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false);
 
 			// move files
 			UtilityService.MoveFiles(path, Utility.DirectoryOfTrashFiles, filename + ".*", true);
@@ -880,7 +880,7 @@ namespace net.vieapps.Services.Books
 			for (var index = 0; index < Utility.Categories.Count; index++)
 			{
 				var info = Utility.Categories[index];
-				info.Counters = (int)await Book.CountAsync<Book>(Filters<Book>.Equals("Category", info.Name), null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
+				info.Counters = (int)await Book.CountAsync(Filters<Book>.Equals("Category", info.Name), null, null, this.CancellationTokenSource.Token).ConfigureAwait(false);
 			}
 
 			// authors
@@ -1005,7 +1005,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// get information
-			var account = await Account.GetAsync<Account>(id, cancellationToken).ConfigureAwait(false);
+			var account = await Account.GetAsync(id, cancellationToken).ConfigureAwait(false);
 
 			// special: not found
 			if (account == null)
@@ -1039,7 +1039,7 @@ namespace net.vieapps.Services.Books
 				throw new AccessDeniedException();
 
 			// get existing information
-			var account = await Account.GetAsync<Account>(id, cancellationToken).ConfigureAwait(false);
+			var account = await Account.GetAsync(id, cancellationToken).ConfigureAwait(false);
 			if (account == null)
 				throw new InformationNotFoundException();
 
@@ -1604,7 +1604,7 @@ namespace net.vieapps.Services.Books
 
 		async Task<JObject> ProcessBookmarksAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
-			var account = await Account.GetAsync<Account>(requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
+			var account = await Account.GetAsync(requestInfo.Session.User.ID, cancellationToken).ConfigureAwait(false) ?? throw new InformationNotFoundException();
 			switch (requestInfo.Verb)
 			{
 				case "GET":
@@ -1620,7 +1620,7 @@ namespace net.vieapps.Services.Books
 						.Select(bookmark => bookmark.FromJson<Account.Bookmark>())
 						.Concat(account.Bookmarks)
 						.Distinct(new Account.BookmarkComparer())
-						.Where(b => Book.Get<Book>(b.ID) != null)
+						.Where(b => Book.Get(b.ID) != null)
 						.OrderByDescending(b => b.Time)
 						.Take(30)
 						.ToList();
@@ -1637,7 +1637,7 @@ namespace net.vieapps.Services.Books
 					var id = requestInfo.GetObjectIdentity();
 					account.Bookmarks = account.Bookmarks
 						.Distinct(new Account.BookmarkComparer())
-						.Where(b => !b.ID.IsEquals(id) && Book.Get<Book>(b.ID) != null)
+						.Where(b => !b.ID.IsEquals(id) && Book.Get(b.ID) != null)
 						.OrderByDescending(b => b.Time)
 						.Take(30)
 						.ToList();
@@ -2014,7 +2014,7 @@ namespace net.vieapps.Services.Books
 		async Task<JToken> SyncAccountAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			var data = requestInfo.GetBodyExpando();
-			var account = await Account.GetAsync<Account>(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
+			var account = await Account.GetAsync(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
 			if (account == null)
 			{
 				account = Account.CreateInstance(data);
@@ -2036,7 +2036,7 @@ namespace net.vieapps.Services.Books
 		async Task<JToken> SyncBookAsync(RequestInfo requestInfo, CancellationToken cancellationToken)
 		{
 			var data = requestInfo.GetBodyExpando();
-			var book = await Book.GetAsync<Book>(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
+			var book = await Book.GetAsync(data.Get<string>("ID"), cancellationToken).ConfigureAwait(false);
 			if (book == null)
 			{
 				book = Book.CreateInstance(data);

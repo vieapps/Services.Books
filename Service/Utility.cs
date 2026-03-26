@@ -303,7 +303,7 @@ namespace net.vieapps.Services.Books
 				return true;
 
 			var book = !string.IsNullOrWhiteSpace(parser.Title) && !string.IsNullOrWhiteSpace(parser.Author)
-				? await Book.GetAsync<Book>($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID(), cancellationToken).ConfigureAwait(false)
+				? await Book.GetAsync($"{parser.Title} - {parser.Author}".Trim().ToLower().GenerateUUID(), cancellationToken).ConfigureAwait(false)
 				: await Book.GetAsync(parser.Title, parser.Author, cancellationToken).ConfigureAwait(false);
 			return book != null;
 		}
