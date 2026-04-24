@@ -231,11 +231,9 @@ namespace net.vieapps.Services.Books
 					return;
 				}
 
-				using (var stream = file.OpenReadStream())
-				{
-					content = new byte[file.Length];
-					await stream.ReadAsync(content, 0, fileSize).ConfigureAwait(false);
-				}
+				using var stream = file.OpenReadStream();
+				content = new byte[file.Length];
+				await stream.ReadAsync(content, 0, fileSize, context.RequestAborted).ConfigureAwait(false);
 			}
 
 			// write into file on the disc
@@ -252,7 +250,7 @@ namespace net.vieapps.Services.Books
 			await context.WriteAsync(new JObject
 			{
 				{ "URI", FileHandlerExtensions.MediaURI + fileName }
-			}.ToString(Newtonsoft.Json.Formatting.None), "application/json", new Dictionary<string, string> { ["Cache-Control"] = context.GetHttpCacheControl(true) }, cancellationToken).ConfigureAwait(false);
+			}.ToBytes(), "application/json", new Dictionary<string, string> { ["Cache-Control"] = context.GetHttpCacheControl(true) }, cancellationToken).ConfigureAwait(false);
 			if (Global.IsDebugLogEnabled)
 				await context.WriteLogsAsync(this.Logger, "Http.Uploads", $"New cover image ({(asBase64 ? "base64" : "file")}) has been uploaded ({filePath} - {fileSize:###,###,###,###,##0} bytes)").ConfigureAwait(false);
 		}
