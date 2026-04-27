@@ -57,7 +57,7 @@ namespace net.vieapps.Services.Books
 			}
 
 			// start the service
-			return base.StartAsync(args, initializeRepository, _ =>
+			return base.StartAsync(args, initializeRepository, Utility.Cache, _ =>
 			{
 				this.RegisterTimers(args);
 				next?.Invoke(this);
