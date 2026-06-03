@@ -75,6 +75,7 @@ namespace net.vieapps.Services.Books
 		public override async Task<JToken> ProcessRequestAsync(RequestInfo requestInfo, CancellationToken cancellationToken = default)
 		{
 			var stopwatch = Stopwatch.StartNew();
+			this.Statistics.RpcEntered();
 			await this.WriteLogsAsync(requestInfo, $"Begin request ({requestInfo.Verb} {requestInfo.GetURI()})").ConfigureAwait(false);
 			using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.CancellationTokenSource.Token))
 				try
@@ -143,6 +144,10 @@ namespace net.vieapps.Services.Books
 				catch (Exception ex)
 				{
 					throw this.GetRuntimeException(requestInfo, ex, stopwatch);
+				}
+				finally
+				{
+					this.Statistics.RpcCompleted(stopwatch);
 				}
 		}
 
